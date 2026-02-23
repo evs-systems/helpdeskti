@@ -1,2 +1,2 @@
-# helpdeskti
-HelpDesk TI
+# HelpDesk TI
+Sistema de chamados internos.
