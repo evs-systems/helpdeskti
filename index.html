@@ -10,13 +10,57 @@
     
     <script>
         (function() {
-            const iconSvg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='112' fill='%232563eb'/><rect x='116' y='146' width='280' height='220' rx='24' fill='none' stroke='white' stroke-width='32'/><line x1='176' y1='416' x2='336' y2='416' stroke='white' stroke-width='32' stroke-linecap='round'/><line x1='256' y1='366' x2='256' y2='416' stroke='white' stroke-width='32'/><path d='M216 266 l 24 24 l 56 -56' stroke='white' stroke-width='32' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>`;
-            const iconUrl = "data:image/svg+xml;charset=utf-8," + iconSvg.replace(/"/g, "'");
-            const linkFavicon = document.createElement('link'); linkFavicon.rel = 'icon'; linkFavicon.href = iconUrl; linkFavicon.type = 'image/svg+xml'; document.head.appendChild(linkFavicon);
-            const linkAppleTouch = document.createElement('link'); linkAppleTouch.rel = 'apple-touch-icon'; linkAppleTouch.href = iconUrl; document.head.appendChild(linkAppleTouch);
-            const manifest = { name: "HelpDesk TI", short_name: "HelpDesk", description: "Sistema de Controle de Chamados e Inventário", start_url: "./", display: "standalone", background_color: "#f8fafc", theme_color: "#2563eb", orientation: "portrait", icons: [{ src: iconUrl, sizes: "192x192", type: "image/svg+xml", purpose: "any maskable" }, { src: iconUrl, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }] };
-            const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
-            const linkManifest = document.createElement('link'); linkManifest.rel = 'manifest'; linkManifest.href = URL.createObjectURL(manifestBlob); document.head.appendChild(linkManifest);
+            // Definição do SVG (agora com width e height explícitos para o canvas ler corretamente)
+            const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#2563eb"/><rect x="116" y="146" width="280" height="220" rx="24" fill="none" stroke="white" stroke-width="32"/><line x1="176" y1="416" x2="336" y2="416" stroke="white" stroke-width="32" stroke-linecap="round"/><line x1="256" y1="366" x2="256" y2="416" stroke="white" stroke-width="32"/><path d="M216 266 l 24 24 l 56 -56" stroke="white" stroke-width="32" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+            
+            // 1. Usa o SVG nativo para Favicon e Abas de Navegador (mais leve e responsivo)
+            const svgUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(iconSvg);
+            const linkFavicon = document.createElement('link'); linkFavicon.rel = 'icon'; linkFavicon.href = svgUrl; linkFavicon.type = 'image/svg+xml'; document.head.appendChild(linkFavicon);
+            const linkAppleTouch = document.createElement('link'); linkAppleTouch.rel = 'apple-touch-icon'; linkAppleTouch.href = svgUrl; document.head.appendChild(linkAppleTouch);
+
+            // 2. Converte SVG para PNG nativo em memória para o SO Desktop reconhecer (Barra de Tarefas)
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Gera ícone 512x512
+                canvas.width = 512; canvas.height = 512;
+                ctx.drawImage(img, 0, 0, 512, 512);
+                const png512 = canvas.toDataURL('image/png');
+
+                // Gera ícone 192x192
+                canvas.width = 192; canvas.height = 192;
+                ctx.clearRect(0, 0, 192, 192);
+                ctx.drawImage(img, 0, 0, 192, 192);
+                const png192 = canvas.toDataURL('image/png');
+
+                // Cria o Manifesto contendo os formatos PNG
+                const manifest = { 
+                    name: "HelpDesk TI", 
+                    short_name: "HelpDesk", 
+                    description: "Sistema de Controle de Chamados e Inventário", 
+                    start_url: window.location.pathname, 
+                    display: "standalone", 
+                    background_color: "#f8fafc", 
+                    theme_color: "#2563eb", 
+                    orientation: "portrait", 
+                    icons: [
+                        { src: png192, sizes: "192x192", type: "image/png", purpose: "any" }, 
+                        { src: png512, sizes: "512x512", type: "image/png", purpose: "any" },
+                        { src: png192, sizes: "192x192", type: "image/png", purpose: "maskable" }, 
+                        { src: png512, sizes: "512x512", type: "image/png", purpose: "maskable" }
+                    ] 
+                };
+                const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+                const linkManifest = document.createElement('link'); 
+                linkManifest.rel = 'manifest'; 
+                linkManifest.href = URL.createObjectURL(manifestBlob); 
+                document.head.appendChild(linkManifest);
+            };
+            img.src = svgUrl;
+
+            // Service Worker para habilitar função PWA e instalar no PC
             const swCode = `self.addEventListener('install', (e) => { self.skipWaiting(); }); self.addEventListener('activate', (e) => { e.waitUntil(clients.claim()); }); self.addEventListener('fetch', (e) => { });`;
             const swUrl = URL.createObjectURL(new Blob([swCode], {type: 'text/javascript'}));
             if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register(swUrl).catch(err => console.warn('PWA SW falhou', err)); }); }
