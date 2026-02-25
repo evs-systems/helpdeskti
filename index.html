@@ -68,6 +68,7 @@
     </script>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         // Previne o erro "tailwind is not defined" em caso de carregamento assíncrono
         if (typeof tailwind !== 'undefined') {
@@ -313,6 +314,11 @@
             const [isDarkMode, setIsDarkMode] = useState(() => { try { return localStorage.getItem('helpdesk_dark_mode') === 'true'; } catch { return false; } });
             const [isAudioEnabled, setIsAudioEnabled] = useState(true);
 
+            // Refs for Charts
+            const lineChartRef = useRef(null);
+            const pieChartRef = useRef(null);
+            const chartsInstance = useRef({ line: null, pie: null });
+
             // Inventário
             const [inventoryTab, setInventoryTab] = useState('equipments');
             const [equipments, setEquipments] = useState([]);
@@ -393,6 +399,112 @@
             const eqStatusMenuRef = useRef(null);
             const accFilterMenuRef = useRef(null);
             const kanbanStatusMenuRef = useRef(null);
+
+            useEffect(() => {
+                if (view === 'reports' && isAdmin && window.Chart && lineChartRef.current && pieChartRef.current) {
+                    const ctxLine = lineChartRef.current.getContext('2d');
+                    const ctxPie = pieChartRef.current.getContext('2d');
+                    
+                    if (chartsInstance.current.line) chartsInstance.current.line.destroy();
+                    if (chartsInstance.current.pie) chartsInstance.current.pie.destroy();
+
+                    const textColor = isDarkMode ? '#cbd5e1' : '#64748b';
+                    const gridColor = isDarkMode ? '#1e293b' : '#f1f5f9';
+
+                    const isYearly = selectedMonth === 'all';
+                    const lineLabels = [];
+                    const lineData = [];
+                    
+                    if (reportFilterMode === 'today') {
+                        const hoursData = Array(24).fill(0);
+                        filteredTickets.forEach(t => {
+                            const d = t.createdAt?.toDate ? t.createdAt.toDate() : (t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000) : new Date(t.createdAt));
+                            if(d && !isNaN(d.getTime())) hoursData[d.getHours()] += 1;
+                        });
+                        lineLabels.push(...Array.from({length: 24}, (_, i) => `${i}h`));
+                        lineData.push(...hoursData);
+                    } else if (isYearly) {
+                        const monthsData = Array(12).fill(0);
+                        filteredTickets.forEach(t => {
+                            const d = t.createdAt?.toDate ? t.createdAt.toDate() : (t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000) : new Date(t.createdAt));
+                            if(d && !isNaN(d.getTime())) monthsData[d.getMonth()] += 1;
+                        });
+                        lineLabels.push(...MONTHS.map(m => m.substring(0,3)));
+                        lineData.push(...monthsData);
+                    } else {
+                        const currentMonthForCalc = selectedMonth;
+                        const currentYearForCalc = selectedYear;
+                        const daysInMonth = new Date(currentYearForCalc, currentMonthForCalc + 1, 0).getDate();
+                        const daysData = Array(daysInMonth).fill(0);
+                        filteredTickets.forEach(t => {
+                            const d = t.createdAt?.toDate ? t.createdAt.toDate() : (t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000) : new Date(t.createdAt));
+                            if(d && !isNaN(d.getTime())) {
+                                const dayIndex = d.getDate() - 1;
+                                if(dayIndex >= 0 && dayIndex < daysInMonth) {
+                                    daysData[dayIndex] += 1;
+                                }
+                            }
+                        });
+                        lineLabels.push(...Array.from({length: daysInMonth}, (_, i) => `${i+1}`));
+                        lineData.push(...daysData);
+                    }
+
+                    const abertos = filteredTickets.filter(t => t.status !== 'finalizado').length;
+                    const problemas = filteredTickets.filter(t => t.status === 'finalizado' && t.type !== 'request').length;
+                    const solicitacoes = filteredTickets.filter(t => t.status === 'finalizado' && t.type === 'request').length;
+
+                    chartsInstance.current.line = new window.Chart(ctxLine, {
+                        type: 'line',
+                        data: {
+                            labels: lineLabels,
+                            datasets: [{
+                                label: 'Volume de Chamados',
+                                data: lineData,
+                                borderColor: '#2563eb',
+                                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                                borderWidth: 3,
+                                pointBackgroundColor: '#ffffff',
+                                pointBorderColor: '#2563eb',
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                                fill: true,
+                                tension: 0.4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, precision: 0 } },
+                                x: { grid: { display: false }, ticks: { color: textColor } }
+                            }
+                        }
+                    });
+
+                    chartsInstance.current.pie = new window.Chart(ctxPie, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Em Aberto', 'Problemas Técnicos', 'Solicitações'],
+                            datasets: [{
+                                data: [abertos, problemas, solicitacoes],
+                                backgroundColor: ['#eab308', '#3b82f6', '#a855f7'],
+                                borderColor: isDarkMode ? '#0f172a' : '#ffffff',
+                                borderWidth: 2,
+                                hoverOffset: 4
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            cutout: '65%',
+                            plugins: {
+                                legend: { position: 'bottom', labels: { color: textColor, usePointStyle: true, padding: 15, font: { size: 10 } } }
+                            }
+                        }
+                    });
+                }
+            }, [view, filteredTickets, isDarkMode, reportFilterMode, selectedMonth, selectedYear]);
 
             useEffect(() => {
                 setPersistence(auth, browserLocalPersistence).catch(() => {});
@@ -1360,6 +1472,22 @@
                             <div className="bg-red-500 text-white p-6 rounded-3xl shadow-lg shadow-red-500/20"><p className="text-red-100 text-xs font-bold uppercase tracking-widest mb-1">Contestados</p><p className="text-4xl font-black">{reportData.contested}</p></div>
                             <div className="bg-slate-800 text-white p-6 rounded-3xl shadow-lg shadow-slate-500/20"><p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Eficiência</p><p className="text-4xl font-black">{reportData.total > 0 ? Math.round((reportData.finalized / reportData.total) * 100) : 0}%</p></div>
                             </div>
+                            
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-3xl border dark:border-slate-800 shadow-sm">
+                                    <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><BarChart3 size={16}/> Evolução de Chamados</h3>
+                                    <div className="relative w-full h-64">
+                                        <canvas ref={lineChartRef}></canvas>
+                                    </div>
+                                </div>
+                                <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border dark:border-slate-800 shadow-sm">
+                                    <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><Layers size={16}/> Composição</h3>
+                                    <div className="relative w-full h-64">
+                                        <canvas ref={pieChartRef}></canvas>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border dark:border-slate-800"><h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><Building2 size={16}/> Unidade com mais chamados</h3>{reportData.topUnit ? (<div><p className="text-2xl font-black text-slate-800 dark:text-white">{reportData.topUnit[0]}</p><p className="text-sm font-bold text-slate-500">{reportData.topUnit[1]} chamados</p></div>) : <p className="text-slate-400 font-bold">Sem dados</p>}</div>
                             <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border dark:border-slate-800"><h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><Settings size={16}/> Setor com mais chamados</h3>{reportData.topSector ? (<div><p className="text-2xl font-black text-slate-800 dark:text-white">{reportData.topSector[0]}</p><p className="text-sm font-bold text-slate-500">{reportData.topSector[1]} chamados</p></div>) : <p className="text-slate-400 font-bold">Sem dados</p>}</div>
