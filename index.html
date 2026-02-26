@@ -318,6 +318,7 @@
             const lineChartRef = useRef(null);
             const pieChartRef = useRef(null);
             const chartsInstance = useRef({ line: null, pie: null });
+            const isInitialLoadAvisos = useRef(true);
 
             // Inventário
             const [inventoryTab, setInventoryTab] = useState('equipments');
@@ -545,13 +546,49 @@
             useEffect(() => { localStorage.setItem('helpdesk_dark_mode', isDarkMode); }, [isDarkMode]);
             useEffect(() => { setDailyPhrase(MOTIVATIONAL_PHRASES[Math.floor(Math.random() * MOTIVATIONAL_PHRASES.length)]); }, []);
 
+            const requestNotificationPermission = async () => {
+                if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
+                    try { await Notification.requestPermission(); } catch (e) { console.warn("Erro ao pedir permissão de notificação:", e); }
+                }
+            };
+
+            const showSystemNotification = (title, body) => {
+                if ("Notification" in window && Notification.permission === "granted") {
+                    try { 
+                        new Notification(title, { body }); 
+                    } catch (e) {
+                        // Fallback para mobile
+                        if (navigator.serviceWorker) { navigator.serviceWorker.ready.then(reg => reg.showNotification(title, { body })); }
+                    }
+                }
+            };
+
             useEffect(() => {
                 if (!user) return;
+                requestNotificationPermission(); // Pede permissão de notificação do SO
+                
                 const unsubAvisos = onSnapshot(collection(db, 'avisos'), (snapshot) => {
                     setAnnouncements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
+                    
+                    if (!isInitialLoadAvisos.current) {
+                        snapshot.docChanges().forEach((change) => {
+                            if (change.type === "added") {
+                                const data = change.doc.data();
+                                // Mostra notificação se o aviso não foi criado pela própria pessoa na sessão atual
+                                if (data.createdBy !== techName) {
+                                    playSound('update');
+                                    showToast(`Novo Aviso Global: ${data.title}`, data.type === 'critical' ? 'error' : 'warning');
+                                    showSystemNotification(`⚠️ Aviso TI: ${data.title}`, data.message);
+                                }
+                            }
+                        });
+                    } else {
+                        isInitialLoadAvisos.current = false;
+                    }
                 }, (error) => { console.warn("Erro avisos:", error); setAnnouncements([]); });
+                
                 return () => unsubAvisos();
-            }, [user]);
+            }, [user, techName]);
 
             useEffect(() => {
                 function handleClickOutside(event) {
