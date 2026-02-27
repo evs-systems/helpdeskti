@@ -359,6 +359,7 @@
             const [accMoveTypeFilter, setAccMoveTypeFilter] = useState('Todos');
             const [isAccMoveTypeMenuOpen, setIsAccMoveTypeMenuOpen] = useState(false);
             const accMoveTypeMenuRef = useRef(null);
+            const [expandedAccGroups, setExpandedAccGroups] = useState({});
 
             const [kanbanTab, setKanbanTab] = useState('board');
             const [kanbanCards, setKanbanCards] = useState([]);
@@ -1595,7 +1596,7 @@
                                                         ) : (
                                                             groupedMovements.map(group => (
                                                                 <React.Fragment key={group.accId}>
-                                                                    <tr className="bg-slate-100/50 dark:bg-slate-800/50 border-y dark:border-slate-700/50">
+                                                                    <tr className="bg-slate-100/50 dark:bg-slate-800/50 border-y dark:border-slate-700/50 cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors" onClick={() => setExpandedAccGroups(prev => ({...prev, [group.accId]: !prev[group.accId]}))}>
                                                                         <td colSpan="3" className="px-6 py-3">
                                                                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                                                                 <div className="flex items-center gap-3">
@@ -1603,23 +1604,29 @@
                                                                                     <span className="font-bold text-slate-800 dark:text-white text-sm">{group.accName}</span>
                                                                                     <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 bg-white dark:bg-slate-900 border dark:border-slate-700 px-2 py-0.5 rounded-md shrink-0">{group.accType}</span>
                                                                                 </div>
-                                                                                <div className="flex flex-wrap items-center gap-2">
-                                                                                    {group.entradas > 0 && <span className="text-[10px] font-bold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-md flex items-center gap-1"><Plus size={12}/>{group.entradas} Entradas</span>}
-                                                                                    {group.saidas > 0 && <span className="text-[10px] font-bold text-orange-700 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30 px-2 py-1 rounded-md flex items-center gap-1"><Minus size={12}/>{group.saidas} Saídas</span>}
+                                                                                <div className="flex flex-wrap items-center gap-4">
+                                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                                        {group.entradas > 0 && <span className="text-[10px] font-bold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-md flex items-center gap-1"><Plus size={12}/>{group.entradas} Entradas</span>}
+                                                                                        {group.saidas > 0 && <span className="text-[10px] font-bold text-orange-700 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30 px-2 py-1 rounded-md flex items-center gap-1"><Minus size={12}/>{group.saidas} Saídas</span>}
+                                                                                    </div>
+                                                                                    <button type="button" className="text-[10px] font-bold text-blue-600 flex items-center gap-1 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+                                                                                        {expandedAccGroups[group.accId] ? 'Ocultar Detalhes' : 'Ver Detalhes'}
+                                                                                        <ChevronDown size={14} className={`transition-transform duration-300 ${expandedAccGroups[group.accId] ? 'rotate-180' : ''}`} />
+                                                                                    </button>
                                                                                 </div>
                                                                             </div>
                                                                         </td>
                                                                     </tr>
-                                                                    {group.logs.map((log, i) => {
+                                                                    {expandedAccGroups[group.accId] && group.logs.map((log, i) => {
                                                                         const isEntrada = log.action.includes('Entrada') || log.action.includes('cadastrado') || log.action.includes('inicial');
                                                                         const isSaida = log.action.includes('Saída');
                                                                         return (
-                                                                            <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                                                                            <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors animate-in fade-in slide-in-from-top-2">
                                                                                 <td className="px-6 py-3 whitespace-nowrap text-xs font-medium text-slate-500 dark:text-slate-400 lg:pl-12">{formatTimestamp(log.date)}</td>
                                                                                 <td className="px-6 py-3 min-w-[300px]">
                                                                                     <div className="flex items-start gap-2">
                                                                                         <div className={`w-2 h-2 mt-1 rounded-full shrink-0 ${isEntrada ? 'bg-green-500' : isSaida ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
-                                                                                        <p className={`text-xs font-bold leading-relaxed ${isEntrada ? 'text-green-600 dark:text-green-400' : isSaida ? 'text-orange-600 dark:text-orange-400' : 'dark:text-slate-300'}`}>{log.action}</p>
+                                                                                        <p className={`text-xs font-bold leading-relaxed ${isEntrada ? 'text-green-700 dark:text-green-400' : isSaida ? 'text-orange-700 dark:text-orange-400' : 'text-slate-700 dark:text-slate-300'}`}>{log.action}</p>
                                                                                     </div>
                                                                                 </td>
                                                                                 <td className="px-6 py-3 whitespace-nowrap text-xs font-bold dark:text-slate-300"><User size={12} className="inline mr-1 opacity-50"/>{log.user}</td>
