@@ -500,10 +500,10 @@
                     chartsInstance.current.pie = new window.Chart(ctxPie, {
                         type: 'doughnut',
                         data: {
-                            labels: ['Em Aberto', 'Problemas Técnicos', 'Solicitações'],
+                            labels: ['Problemas Técnicos', 'Solicitações'],
                             datasets: [{
-                                data: [abertos, problemas, solicitacoes],
-                                backgroundColor: ['#eab308', '#3b82f6', '#a855f7'],
+                                data: [problemas, solicitacoes],
+                                backgroundColor: ['#3b82f6', '#a855f7'],
                                 borderColor: isDarkMode ? '#0f172a' : '#ffffff',
                                 borderWidth: 2,
                                 hoverOffset: 4
