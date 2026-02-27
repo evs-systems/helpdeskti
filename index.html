@@ -356,6 +356,9 @@
             const [isAccMoveYearMenuOpen, setIsAccMoveYearMenuOpen] = useState(false);
             const accMoveMonthMenuRef = useRef(null);
             const accMoveYearMenuRef = useRef(null);
+            const [accMoveTypeFilter, setAccMoveTypeFilter] = useState('Todos');
+            const [isAccMoveTypeMenuOpen, setIsAccMoveTypeMenuOpen] = useState(false);
+            const accMoveTypeMenuRef = useRef(null);
 
             const [kanbanTab, setKanbanTab] = useState('board');
             const [kanbanCards, setKanbanCards] = useState([]);
@@ -617,6 +620,7 @@
                     if (recurrenceMenuRef.current && !recurrenceMenuRef.current.contains(event.target)) setIsRecurrenceMenuOpen(false);
                     if (accMoveMonthMenuRef.current && !accMoveMonthMenuRef.current.contains(event.target)) setIsAccMoveMonthMenuOpen(false);
                     if (accMoveYearMenuRef.current && !accMoveYearMenuRef.current.contains(event.target)) setIsAccMoveYearMenuOpen(false);
+                    if (accMoveTypeMenuRef.current && !accMoveTypeMenuRef.current.contains(event.target)) setIsAccMoveTypeMenuOpen(false);
                 }
                 document.addEventListener("mousedown", handleClickOutside);
                 return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -960,11 +964,47 @@
                 });
                 moves = moves.filter(m => {
                     if (isNaN(m.dateObj.getTime())) return false;
-                    if (accMoveMonth === 'all') return m.dateObj.getFullYear() === accMoveYear;
-                    return m.dateObj.getMonth() === accMoveMonth && m.dateObj.getFullYear() === accMoveYear;
+                    
+                    const matchesMonth = accMoveMonth === 'all' 
+                        ? m.dateObj.getFullYear() === accMoveYear 
+                        : (m.dateObj.getMonth() === accMoveMonth && m.dateObj.getFullYear() === accMoveYear);
+                        
+                    const matchesType = accMoveTypeFilter === 'Todos' || m.accType === accMoveTypeFilter;
+
+                    return matchesMonth && matchesType;
                 });
                 return moves.sort((a, b) => b.dateObj - a.dateObj);
-            }, [accessories, accMoveMonth, accMoveYear]);
+            }, [accessories, accMoveMonth, accMoveYear, accMoveTypeFilter]);
+
+            const groupedMovements = useMemo(() => {
+                const groups = {};
+                filteredMovements.forEach(m => {
+                    if (!groups[m.accId]) {
+                        groups[m.accId] = {
+                            accId: m.accId,
+                            accName: m.accName,
+                            accType: m.accType,
+                            logs: [],
+                            entradas: 0,
+                            saidas: 0
+                        };
+                    }
+                    groups[m.accId].logs.push(m);
+                    
+                    const action = m.action;
+                    if (action.includes('Estoque inicial:')) {
+                        const match = action.match(/Estoque inicial:\s*(\d+)/);
+                        if (match) groups[m.accId].entradas += parseInt(match[1], 10);
+                    } else if (action.includes('Entrada de +')) {
+                        const match = action.match(/Entrada de \+(\d+)/);
+                        if (match) groups[m.accId].entradas += parseInt(match[1], 10);
+                    } else if (action.includes('Saída de -')) {
+                        const match = action.match(/Saída de -(\d+)/);
+                        if (match) groups[m.accId].saidas += parseInt(match[1], 10);
+                    }
+                });
+                return Object.values(groups).sort((a, b) => a.accName.localeCompare(b.accName));
+            }, [filteredMovements]);
 
             const handleDragStart = (e, cardId) => { setDraggedCardId(cardId); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData('text/plain', cardId); };
             const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
@@ -1524,7 +1564,11 @@
                                 {accViewMode === 'movements' && (
                                     <div className="space-y-4 animate-in fade-in zoom-in-95">
                                         <div className="flex flex-wrap items-center gap-4 bg-white dark:bg-slate-900 border dark:border-slate-800 p-4 rounded-2xl shadow-sm">
-                                            <p className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2"><History size={16}/> Filtrar Período:</p>
+                                            <p className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2"><History size={16}/> Filtros:</p>
+                                            <div className="relative" ref={accMoveTypeMenuRef}>
+                                                <button onClick={() => setIsAccMoveTypeMenuOpen(!isAccMoveTypeMenuOpen)} className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white min-w-[140px]"><Filter size={14} className="text-blue-500 shrink-0"/><span className="truncate">{accMoveTypeFilter === 'Todos' ? 'Todos os Tipos' : accMoveTypeFilter}</span><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isAccMoveTypeMenuOpen ? 'rotate-180' : ''}`} /></button>
+                                                {isAccMoveTypeMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 custom-scrollbar max-h-60 overflow-y-auto"><button onClick={() => { setAccMoveTypeFilter('Todos'); setIsAccMoveTypeMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Tipos {accMoveTypeFilter === 'Todos' && <Check size={12} className="text-blue-600" />}</button><div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />{ACCESSORY_TYPES.map(t => (<button key={t} onClick={() => { setAccMoveTypeFilter(t); setIsAccMoveTypeMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{t} {accMoveTypeFilter === t && <Check size={12} className="text-blue-600" />}</button>))}</div>)}
+                                            </div>
                                             <div className="relative" ref={accMoveMonthMenuRef}>
                                                 <button onClick={() => setIsAccMoveMonthMenuOpen(!isAccMoveMonthMenuOpen)} className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white min-w-[140px]"><Calendar size={14} className="text-blue-500 shrink-0"/><span className="truncate">{accMoveMonth === 'all' ? 'Todos os Meses' : MONTHS[accMoveMonth]}</span><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isAccMoveMonthMenuOpen ? 'rotate-180' : ''}`} /></button>
                                                 {isAccMoveMonthMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 custom-scrollbar max-h-60 overflow-y-auto"><button onClick={() => { setAccMoveMonth('all'); setIsAccMoveMonthMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Meses {accMoveMonth === 'all' && <Check size={12} className="text-blue-600" />}</button><div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />{MONTHS.map((m, i) => (<button key={i} onClick={() => { setAccMoveMonth(i); setIsAccMoveMonthMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{m} {accMoveMonth === i && <Check size={12} className="text-blue-600" />}</button>))}</div>)}
@@ -1541,35 +1585,49 @@
                                                     <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase text-[10px] tracking-widest font-black">
                                                         <tr>
                                                             <th className="px-6 py-4">Data e Hora</th>
-                                                            <th className="px-6 py-4">Acessório</th>
                                                             <th className="px-6 py-4">Ação / Movimentação</th>
                                                             <th className="px-6 py-4">Técnico</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y dark:divide-slate-800">
-                                                        {filteredMovements.length === 0 ? (
-                                                            <tr><td colSpan="4" className="px-6 py-12 text-center text-slate-400 font-bold border-2 border-dashed border-transparent">Nenhuma movimentação registrada no período.</td></tr>
+                                                        {groupedMovements.length === 0 ? (
+                                                            <tr><td colSpan="3" className="px-6 py-12 text-center text-slate-400 font-bold border-2 border-dashed border-transparent">Nenhuma movimentação registrada no período.</td></tr>
                                                         ) : (
-                                                            filteredMovements.map((log, i) => {
-                                                                const isEntrada = log.action.includes('Entrada') || log.action.includes('cadastrado') || log.action.includes('inicial');
-                                                                const isSaida = log.action.includes('Saída');
-                                                                return (
-                                                                    <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                                                                        <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500 dark:text-slate-400">{formatTimestamp(log.date)}</td>
-                                                                        <td className="px-6 py-4 min-w-[200px]">
-                                                                            <p className="font-bold dark:text-white text-xs">{log.accName}</p>
-                                                                            <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">{log.accType}</p>
-                                                                        </td>
-                                                                        <td className="px-6 py-4 min-w-[300px]">
-                                                                            <div className="flex items-start gap-2">
-                                                                                <div className={`w-2 h-2 mt-1 rounded-full shrink-0 ${isEntrada ? 'bg-green-500' : isSaida ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
-                                                                                <p className={`text-xs font-bold leading-relaxed ${isEntrada ? 'text-green-600 dark:text-green-400' : isSaida ? 'text-orange-600 dark:text-orange-400' : 'dark:text-slate-300'}`}>{log.action}</p>
+                                                            groupedMovements.map(group => (
+                                                                <React.Fragment key={group.accId}>
+                                                                    <tr className="bg-slate-100/50 dark:bg-slate-800/50 border-y dark:border-slate-700/50">
+                                                                        <td colSpan="3" className="px-6 py-3">
+                                                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                                                <div className="flex items-center gap-3">
+                                                                                    <Layers size={16} className="text-blue-500 shrink-0"/>
+                                                                                    <span className="font-bold text-slate-800 dark:text-white text-sm">{group.accName}</span>
+                                                                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 bg-white dark:bg-slate-900 border dark:border-slate-700 px-2 py-0.5 rounded-md shrink-0">{group.accType}</span>
+                                                                                </div>
+                                                                                <div className="flex flex-wrap items-center gap-2">
+                                                                                    {group.entradas > 0 && <span className="text-[10px] font-bold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-md flex items-center gap-1"><Plus size={12}/>{group.entradas} Entradas</span>}
+                                                                                    {group.saidas > 0 && <span className="text-[10px] font-bold text-orange-700 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30 px-2 py-1 rounded-md flex items-center gap-1"><Minus size={12}/>{group.saidas} Saídas</span>}
+                                                                                </div>
                                                                             </div>
                                                                         </td>
-                                                                        <td className="px-6 py-4 whitespace-nowrap text-xs font-bold dark:text-slate-300"><User size={12} className="inline mr-1 opacity-50"/>{log.user}</td>
                                                                     </tr>
-                                                                );
-                                                            })
+                                                                    {group.logs.map((log, i) => {
+                                                                        const isEntrada = log.action.includes('Entrada') || log.action.includes('cadastrado') || log.action.includes('inicial');
+                                                                        const isSaida = log.action.includes('Saída');
+                                                                        return (
+                                                                            <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                                                                                <td className="px-6 py-3 whitespace-nowrap text-xs font-medium text-slate-500 dark:text-slate-400 lg:pl-12">{formatTimestamp(log.date)}</td>
+                                                                                <td className="px-6 py-3 min-w-[300px]">
+                                                                                    <div className="flex items-start gap-2">
+                                                                                        <div className={`w-2 h-2 mt-1 rounded-full shrink-0 ${isEntrada ? 'bg-green-500' : isSaida ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
+                                                                                        <p className={`text-xs font-bold leading-relaxed ${isEntrada ? 'text-green-600 dark:text-green-400' : isSaida ? 'text-orange-600 dark:text-orange-400' : 'dark:text-slate-300'}`}>{log.action}</p>
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-6 py-3 whitespace-nowrap text-xs font-bold dark:text-slate-300"><User size={12} className="inline mr-1 opacity-50"/>{log.user}</td>
+                                                                            </tr>
+                                                                        );
+                                                                    })}
+                                                                </React.Fragment>
+                                                            ))
                                                         )}
                                                     </tbody>
                                                 </table>
