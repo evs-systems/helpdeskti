@@ -1548,15 +1548,30 @@
                                                 <h4 className="text-sm font-bold dark:text-white leading-tight mt-1 mb-4 line-clamp-2" title={acc.name}>{acc.name}</h4>
                                             </div>
                                             <div className="flex gap-2 mt-auto">
-                                                <button onClick={() => setExpandedLogId(expandedLogId === acc.id ? null : acc.id)} className="p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-blue-600 rounded-xl transition-colors"><History size={16}/></button>
-                                                <button onClick={() => setAccMoveModal(acc.id)} className="flex-1 bg-slate-900 dark:bg-blue-600 hover:bg-slate-800 dark:hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-xl transition-all shadow-md">Movimentar</button>
+                                            <button onClick={() => setExpandedLogId(expandedLogId === acc.id ? null : acc.id)} className="p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-blue-600 rounded-xl transition-colors"><History size={16}/></button>
+                                            <button onClick={() => setAccMoveModal(acc.id)} className="flex-1 bg-slate-900 dark:bg-blue-600 hover:bg-slate-800 dark:hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-xl transition-all shadow-md">Movimentar</button>
+                                        </div>
+                                        {expandedLogId === acc.id && (
+                                            <div className="mt-4 pt-4 border-t dark:border-slate-800 animate-in zoom-in-95">
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Últimas 5 Movs.</p>
+                                                <div className="space-y-2">
+                                                    {[...(acc.history || [])].reverse().slice(0,5).map((log, i) => {
+                                                        const actionLower = (log.action || '').toLowerCase();
+                                                        const isEntrada = actionLower.includes('entrada') || actionLower.includes('cadastrado') || actionLower.includes('inicial');
+                                                        const isSaida = actionLower.includes('saída') || actionLower.includes('saida');
+                                                        return (
+                                                            <div key={i} className="text-[10px]">
+                                                                <p className={`font-bold ${isEntrada ? 'text-green-700 dark:text-green-400' : isSaida ? 'text-orange-700 dark:text-orange-400' : 'text-slate-700 dark:text-slate-300'} leading-tight`}>{log.action}</p>
+                                                                <p className="text-slate-400 mt-0.5">{formatTimestamp(log.date)} • {log.user}</p>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                            {expandedLogId === acc.id && (
-                                                <div className="mt-4 pt-4 border-t dark:border-slate-800 animate-in zoom-in-95"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Últimas 5 Movs.</p><div className="space-y-2">{[...(acc.history || [])].reverse().slice(0,5).map((log, i) => (<div key={i} className="text-[10px]"><p className={`font-bold ${log.action.includes('Entrada') ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'} leading-tight`}>{log.action}</p><p className="text-slate-400 mt-0.5">{formatTimestamp(log.date)} • {log.user}</p></div>))}</div></div>
-                                            )}
-                                            </div>
-                                        )
-                                        })
+                                        )}
+                                        </div>
+                                    )
+                                    })
                                     )}
                                     </div>
                                     </>
@@ -1618,14 +1633,15 @@
                                                                         </td>
                                                                     </tr>
                                                                     {expandedAccGroups[group.accId] && group.logs.map((log, i) => {
-                                                                        const isEntrada = log.action.includes('Entrada') || log.action.includes('cadastrado') || log.action.includes('inicial');
-                                                                        const isSaida = log.action.includes('Saída');
+                                                                        const actionLower = (log.action || '').toLowerCase();
+                                                                        const isEntrada = actionLower.includes('entrada') || actionLower.includes('cadastrado') || actionLower.includes('inicial');
+                                                                        const isSaida = actionLower.includes('saída') || actionLower.includes('saida');
                                                                         return (
                                                                             <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors animate-in fade-in slide-in-from-top-2">
                                                                                 <td className="px-6 py-3 whitespace-nowrap text-xs font-medium text-slate-500 dark:text-slate-400 lg:pl-12">{formatTimestamp(log.date)}</td>
                                                                                 <td className="px-6 py-3 min-w-[300px]">
                                                                                     <div className="flex items-start gap-2">
-                                                                                        <div className={`w-2 h-2 mt-1 rounded-full shrink-0 ${isEntrada ? 'bg-green-500' : isSaida ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
+                                                                                        <div className={`w-2 h-2 mt-1 rounded-full shrink-0 ${isEntrada ? 'bg-green-500' : isSaida ? 'bg-orange-500' : 'bg-slate-400'}`}></div>
                                                                                         <p className={`text-xs font-bold leading-relaxed ${isEntrada ? 'text-green-700 dark:text-green-400' : isSaida ? 'text-orange-700 dark:text-orange-400' : 'text-slate-700 dark:text-slate-300'}`}>{log.action}</p>
                                                                                     </div>
                                                                                 </td>
