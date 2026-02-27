@@ -348,6 +348,15 @@
             const [isEqStatusMenuOpen, setIsEqStatusMenuOpen] = useState(false);
             const [isAccFilterMenuOpen, setIsAccFilterMenuOpen] = useState(false);
 
+            // Acessórios - Views e Filtros
+            const [accViewMode, setAccViewMode] = useState('stock'); 
+            const [accMoveMonth, setAccMoveMonth] = useState(new Date().getMonth());
+            const [accMoveYear, setAccMoveYear] = useState(new Date().getFullYear());
+            const [isAccMoveMonthMenuOpen, setIsAccMoveMonthMenuOpen] = useState(false);
+            const [isAccMoveYearMenuOpen, setIsAccMoveYearMenuOpen] = useState(false);
+            const accMoveMonthMenuRef = useRef(null);
+            const accMoveYearMenuRef = useRef(null);
+
             const [kanbanTab, setKanbanTab] = useState('board');
             const [kanbanCards, setKanbanCards] = useState([]);
             const [isKanbanCardModalOpen, setIsKanbanCardModalOpen] = useState(false);
@@ -606,6 +615,8 @@
                     if (accFilterMenuRef.current && !accFilterMenuRef.current.contains(event.target)) setIsAccFilterMenuOpen(false);
                     if (kanbanStatusMenuRef.current && !kanbanStatusMenuRef.current.contains(event.target)) setIsKanbanStatusMenuOpen(false);
                     if (recurrenceMenuRef.current && !recurrenceMenuRef.current.contains(event.target)) setIsRecurrenceMenuOpen(false);
+                    if (accMoveMonthMenuRef.current && !accMoveMonthMenuRef.current.contains(event.target)) setIsAccMoveMonthMenuOpen(false);
+                    if (accMoveYearMenuRef.current && !accMoveYearMenuRef.current.contains(event.target)) setIsAccMoveYearMenuOpen(false);
                 }
                 document.addEventListener("mousedown", handleClickOutside);
                 return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -930,6 +941,30 @@
 
             const decommissionedEquipments = useMemo(() => equipments.filter(eq => eq.status === 'baixado' && (!eqSearchTerm || (eq.model && eq.model.toLowerCase().includes(eqSearchTerm.toLowerCase())) || (eq.deviceId && eq.deviceId.toLowerCase().includes(eqSearchTerm.toLowerCase())) || (eq.serialNumber && eq.serialNumber.toLowerCase().includes(eqSearchTerm.toLowerCase())) || (eq.ipAddress && eq.ipAddress.toLowerCase().includes(eqSearchTerm.toLowerCase())))), [equipments, eqSearchTerm]);
             const filteredAccessories = useMemo(() => accessories.filter(acc => accTypeFilter === 'Todos' || acc.type === accTypeFilter), [accessories, accTypeFilter]);
+
+            const filteredMovements = useMemo(() => {
+                let moves = [];
+                accessories.forEach(acc => {
+                    if (acc.history && acc.history.length > 0) {
+                        acc.history.forEach(log => {
+                            const dateObj = new Date(log.date);
+                            moves.push({
+                                ...log,
+                                accId: acc.id,
+                                accName: acc.name,
+                                accType: acc.type,
+                                dateObj: dateObj
+                            });
+                        });
+                    }
+                });
+                moves = moves.filter(m => {
+                    if (isNaN(m.dateObj.getTime())) return false;
+                    if (accMoveMonth === 'all') return m.dateObj.getFullYear() === accMoveYear;
+                    return m.dateObj.getMonth() === accMoveMonth && m.dateObj.getFullYear() === accMoveYear;
+                });
+                return moves.sort((a, b) => b.dateObj - a.dateObj);
+            }, [accessories, accMoveMonth, accMoveYear]);
 
             const handleDragStart = (e, cardId) => { setDraggedCardId(cardId); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData('text/plain', cardId); };
             const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
@@ -1431,45 +1466,117 @@
 
                             {inventoryTab === 'accessories' && (
                             <div className="space-y-4 animate-in slide-in-from-right-4">
-                                <div className="flex justify-between items-center bg-slate-900 dark:bg-slate-800 p-4 rounded-2xl shadow-sm">
-                                <div className="flex gap-4 text-white"><div className="text-center px-4"><p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Itens Encontrados</p><p className="text-2xl font-black">{filteredAccessories.length}</p></div></div>
-                                <button onClick={() => setIsAccModalOpen(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20"><Plus size={16} /> Novo Acessório</button>
+                                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-slate-900 dark:bg-slate-800 p-4 rounded-2xl shadow-sm gap-4">
+                                <div className="flex gap-4 text-white min-w-max">
+                                    <div className="text-center px-4">
+                                        <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Itens Encontrados</p>
+                                        <p className="text-2xl font-black">{filteredAccessories.length}</p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-1 w-full lg:w-auto justify-center">
+                                    <div className="flex bg-slate-800 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-auto">
+                                        <button onClick={() => setAccViewMode('stock')} className={`flex-1 px-6 py-2 rounded-lg text-xs font-bold transition-all ${accViewMode === 'stock' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}>Estoque Atual</button>
+                                        <button onClick={() => setAccViewMode('movements')} className={`flex-1 px-6 py-2 rounded-lg text-xs font-bold transition-all ${accViewMode === 'movements' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}>Relatório de Movimentações</button>
+                                    </div>
+                                </div>
+                                <button onClick={() => setIsAccModalOpen(true)} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20 w-full lg:w-auto shrink-0"><Plus size={16} /> Novo Acessório</button>
                                 </div>
 
-                                <div className="flex bg-white dark:bg-slate-900 border dark:border-slate-800 p-4 rounded-2xl shadow-sm">
-                                <div className="relative w-full md:w-64" ref={accFilterMenuRef}>
-                                    <button onClick={() => setIsAccFilterMenuOpen(!isAccFilterMenuOpen)} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><div className="flex items-center gap-2 overflow-hidden"><Filter size={16} className="text-blue-500 flex-shrink-0" /><span className="truncate">{accTypeFilter === 'Todos' ? 'Filtrar por Tipo' : accTypeFilter}</span></div><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isAccFilterMenuOpen ? 'rotate-180' : ''}`} /></button>
-                                    {isAccFilterMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar"><button onClick={() => { setAccTypeFilter('Todos'); setIsAccFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Tipos {accTypeFilter === 'Todos' && <Check size={12} className="text-blue-600" />}</button><div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />{ACCESSORY_TYPES.map(t => (<button key={t} onClick={() => { setAccTypeFilter(t); setIsAccFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{t} {accTypeFilter === t && <Check size={12} className="text-blue-600" />}</button>))}</div>)}
-                                </div>
-                                </div>
+                                {accViewMode === 'stock' && (
+                                    <>
+                                    <div className="flex bg-white dark:bg-slate-900 border dark:border-slate-800 p-4 rounded-2xl shadow-sm">
+                                    <div className="relative w-full md:w-64" ref={accFilterMenuRef}>
+                                        <button onClick={() => setIsAccFilterMenuOpen(!isAccFilterMenuOpen)} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><div className="flex items-center gap-2 overflow-hidden"><Filter size={16} className="text-blue-500 flex-shrink-0" /><span className="truncate">{accTypeFilter === 'Todos' ? 'Filtrar por Tipo' : accTypeFilter}</span></div><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isAccFilterMenuOpen ? 'rotate-180' : ''}`} /></button>
+                                        {isAccFilterMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar"><button onClick={() => { setAccTypeFilter('Todos'); setIsAccFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Tipos {accTypeFilter === 'Todos' && <Check size={12} className="text-blue-600" />}</button><div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />{ACCESSORY_TYPES.map(t => (<button key={t} onClick={() => { setAccTypeFilter(t); setIsAccFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{t} {accTypeFilter === t && <Check size={12} className="text-blue-600" />}</button>))}</div>)}
+                                    </div>
+                                    </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                {filteredAccessories.length === 0 ? (<div className="col-span-full py-24 text-center border-2 border-dashed rounded-3xl text-slate-400 font-bold border-slate-200 dark:border-slate-800">Nenhum acessório encontrado.</div>) : (
-                                    filteredAccessories.map(acc => {
-                                    const isLowStock = acc.quantity < 5;
-                                    const isOut = acc.quantity === 0;
-                                    return (
-                                        <div key={acc.id} className={`bg-white dark:bg-slate-900 border ${isOut ? 'border-red-200 dark:border-red-900/50' : isLowStock ? 'border-orange-200 dark:border-orange-900/50' : 'dark:border-slate-800'} rounded-3xl p-5 shadow-sm flex flex-col justify-between`}>
-                                        <div>
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300">{acc.type.includes('Mouse') ? <Mouse size={20}/> : acc.type.includes('Teclado') ? <Keyboard size={20}/> : acc.type.includes('Fone') ? <Headphones size={20}/> : <HardDrive size={20}/>}</div>
-                                                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${isOut ? 'bg-red-100 text-red-600 dark:bg-red-900/30' : isLowStock ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30' : 'bg-green-100 text-green-600 dark:bg-green-900/30'}`}>Qtd: {acc.quantity}</span>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                    {filteredAccessories.length === 0 ? (<div className="col-span-full py-24 text-center border-2 border-dashed rounded-3xl text-slate-400 font-bold border-slate-200 dark:border-slate-800">Nenhum acessório encontrado.</div>) : (
+                                        filteredAccessories.map(acc => {
+                                        const isLowStock = acc.quantity < 5;
+                                        const isOut = acc.quantity === 0;
+                                        return (
+                                            <div key={acc.id} className={`bg-white dark:bg-slate-900 border ${isOut ? 'border-red-200 dark:border-red-900/50' : isLowStock ? 'border-orange-200 dark:border-orange-900/50' : 'dark:border-slate-800'} rounded-3xl p-5 shadow-sm flex flex-col justify-between`}>
+                                            <div>
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300">{acc.type.includes('Mouse') ? <Mouse size={20}/> : acc.type.includes('Teclado') ? <Keyboard size={20}/> : acc.type.includes('Fone') ? <Headphones size={20}/> : <HardDrive size={20}/>}</div>
+                                                    <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${isOut ? 'bg-red-100 text-red-600 dark:bg-red-900/30' : isLowStock ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30' : 'bg-green-100 text-green-600 dark:bg-green-900/30'}`}>Qtd: {acc.quantity}</span>
+                                                </div>
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{acc.type}</p>
+                                                <h4 className="text-sm font-bold dark:text-white leading-tight mt-1 mb-4 line-clamp-2" title={acc.name}>{acc.name}</h4>
                                             </div>
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{acc.type}</p>
-                                            <h4 className="text-sm font-bold dark:text-white leading-tight mt-1 mb-4 line-clamp-2" title={acc.name}>{acc.name}</h4>
-                                        </div>
-                                        <div className="flex gap-2 mt-auto">
-                                            <button onClick={() => setExpandedLogId(expandedLogId === acc.id ? null : acc.id)} className="p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-blue-600 rounded-xl transition-colors"><History size={16}/></button>
-                                            <button onClick={() => setAccMoveModal(acc.id)} className="flex-1 bg-slate-900 dark:bg-blue-600 hover:bg-slate-800 dark:hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-xl transition-all shadow-md">Movimentar</button>
-                                        </div>
-                                        {expandedLogId === acc.id && (
-                                            <div className="mt-4 pt-4 border-t dark:border-slate-800 animate-in zoom-in-95"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Últimas 5 Movs.</p><div className="space-y-2">{[...(acc.history || [])].reverse().slice(0,5).map((log, i) => (<div key={i} className="text-[10px]"><p className={`font-bold ${log.action.includes('Entrada') ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'} leading-tight`}>{log.action}</p><p className="text-slate-400 mt-0.5">{formatTimestamp(log.date)} • {log.user}</p></div>))}</div></div>
-                                        )}
-                                        </div>
-                                    )
-                                    })
+                                            <div className="flex gap-2 mt-auto">
+                                                <button onClick={() => setExpandedLogId(expandedLogId === acc.id ? null : acc.id)} className="p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-blue-600 rounded-xl transition-colors"><History size={16}/></button>
+                                                <button onClick={() => setAccMoveModal(acc.id)} className="flex-1 bg-slate-900 dark:bg-blue-600 hover:bg-slate-800 dark:hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-xl transition-all shadow-md">Movimentar</button>
+                                            </div>
+                                            {expandedLogId === acc.id && (
+                                                <div className="mt-4 pt-4 border-t dark:border-slate-800 animate-in zoom-in-95"><p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Últimas 5 Movs.</p><div className="space-y-2">{[...(acc.history || [])].reverse().slice(0,5).map((log, i) => (<div key={i} className="text-[10px]"><p className={`font-bold ${log.action.includes('Entrada') ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'} leading-tight`}>{log.action}</p><p className="text-slate-400 mt-0.5">{formatTimestamp(log.date)} • {log.user}</p></div>))}</div></div>
+                                            )}
+                                            </div>
+                                        )
+                                        })
+                                    )}
+                                    </div>
+                                    </>
                                 )}
-                                </div>
+
+                                {accViewMode === 'movements' && (
+                                    <div className="space-y-4 animate-in fade-in zoom-in-95">
+                                        <div className="flex flex-wrap items-center gap-4 bg-white dark:bg-slate-900 border dark:border-slate-800 p-4 rounded-2xl shadow-sm">
+                                            <p className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2"><History size={16}/> Filtrar Período:</p>
+                                            <div className="relative" ref={accMoveMonthMenuRef}>
+                                                <button onClick={() => setIsAccMoveMonthMenuOpen(!isAccMoveMonthMenuOpen)} className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white min-w-[140px]"><Calendar size={14} className="text-blue-500 shrink-0"/><span className="truncate">{accMoveMonth === 'all' ? 'Todos os Meses' : MONTHS[accMoveMonth]}</span><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isAccMoveMonthMenuOpen ? 'rotate-180' : ''}`} /></button>
+                                                {isAccMoveMonthMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 custom-scrollbar max-h-60 overflow-y-auto"><button onClick={() => { setAccMoveMonth('all'); setIsAccMoveMonthMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Meses {accMoveMonth === 'all' && <Check size={12} className="text-blue-600" />}</button><div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />{MONTHS.map((m, i) => (<button key={i} onClick={() => { setAccMoveMonth(i); setIsAccMoveMonthMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{m} {accMoveMonth === i && <Check size={12} className="text-blue-600" />}</button>))}</div>)}
+                                            </div>
+                                            <div className="relative" ref={accMoveYearMenuRef}>
+                                                <button onClick={() => setIsAccMoveYearMenuOpen(!isAccMoveYearMenuOpen)} className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white min-w-[100px]"><span className="truncate">{accMoveYear}</span><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isAccMoveYearMenuOpen ? 'rotate-180' : ''}`} /></button>
+                                                {isAccMoveYearMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 custom-scrollbar max-h-60 overflow-y-auto">{availableYears.map(y => (<button key={y} onClick={() => { setAccMoveYear(y); setIsAccMoveYearMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{y} {accMoveYear === y && <Check size={12} className="text-blue-600" />}</button>))}</div>)}
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 overflow-hidden shadow-sm">
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-left text-sm">
+                                                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase text-[10px] tracking-widest font-black">
+                                                        <tr>
+                                                            <th className="px-6 py-4">Data e Hora</th>
+                                                            <th className="px-6 py-4">Acessório</th>
+                                                            <th className="px-6 py-4">Ação / Movimentação</th>
+                                                            <th className="px-6 py-4">Técnico</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y dark:divide-slate-800">
+                                                        {filteredMovements.length === 0 ? (
+                                                            <tr><td colSpan="4" className="px-6 py-12 text-center text-slate-400 font-bold border-2 border-dashed border-transparent">Nenhuma movimentação registrada no período.</td></tr>
+                                                        ) : (
+                                                            filteredMovements.map((log, i) => {
+                                                                const isEntrada = log.action.includes('Entrada') || log.action.includes('cadastrado') || log.action.includes('inicial');
+                                                                const isSaida = log.action.includes('Saída');
+                                                                return (
+                                                                    <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                                                                        <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-slate-500 dark:text-slate-400">{formatTimestamp(log.date)}</td>
+                                                                        <td className="px-6 py-4 min-w-[200px]">
+                                                                            <p className="font-bold dark:text-white text-xs">{log.accName}</p>
+                                                                            <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">{log.accType}</p>
+                                                                        </td>
+                                                                        <td className="px-6 py-4 min-w-[300px]">
+                                                                            <div className="flex items-start gap-2">
+                                                                                <div className={`w-2 h-2 mt-1 rounded-full shrink-0 ${isEntrada ? 'bg-green-500' : isSaida ? 'bg-orange-500' : 'bg-blue-500'}`}></div>
+                                                                                <p className={`text-xs font-bold leading-relaxed ${isEntrada ? 'text-green-600 dark:text-green-400' : isSaida ? 'text-orange-600 dark:text-orange-400' : 'dark:text-slate-300'}`}>{log.action}</p>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="px-6 py-4 whitespace-nowrap text-xs font-bold dark:text-slate-300"><User size={12} className="inline mr-1 opacity-50"/>{log.user}</td>
+                                                                    </tr>
+                                                                );
+                                                            })
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                             )}
                         </div>
