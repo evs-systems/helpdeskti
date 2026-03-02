@@ -304,6 +304,7 @@
             const [deferredPrompt, setDeferredPrompt] = useState(null);
             const [lastReadTimes, setLastReadTimes] = useState(() => { try { const saved = localStorage.getItem('helpdesk_read_times'); return saved ? JSON.parse(saved) : {}; } catch { return {}; } });
             const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
+            const [archiveDisplayLimit, setArchiveDisplayLimit] = useState(10);
             const [confirmationModal, setConfirmationModal] = useState(null); 
             const [reportFilterMode, setReportFilterMode] = useState('today');
             const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -910,6 +911,14 @@
                     return view === 'archive' ? isFinalized && matchesSearch : !isFinalized && matchesSearch;
                 });
             }, [tickets, searchTerm, unitFilter, priorityFilter, typeFilter, isAdmin, userSector, userUnit, view, techViewMode, techName, dateFilter]);
+
+            const paginatedTickets = useMemo(() => {
+                return view === 'archive' ? filteredTickets.slice(0, archiveDisplayLimit) : filteredTickets;
+            }, [filteredTickets, view, archiveDisplayLimit]);
+
+            useEffect(() => {
+                setArchiveDisplayLimit(10);
+            }, [view, searchTerm, unitFilter, priorityFilter, typeFilter]);
 
             const activeCount = useMemo(() => tickets.filter(t => t.status !== 'finalizado' && t.status !== 'contestado' && (t.technician === 'Pendente' || t.technician === techName)).length, [tickets, techName]);
             const contestedCount = useMemo(() => tickets.filter(t => t.status === 'contestado').length, [tickets]);
@@ -1842,7 +1851,7 @@
                                             <div className="md:col-span-4 pl-4">Status & Gestão</div>
                                         </div>
                                     )}
-                                    {filteredTickets.map(ticket => {
+                                    {paginatedTickets.map(ticket => {
                                         const status = STATUS_OPTIONS.find(s => s.id === ticket.status) || STATUS_OPTIONS[0];
                                         const priority = PRIORITY_OPTIONS.find(p => p.id === ticket.priority) || PRIORITY_OPTIONS[0];
                                         const isExpanded = expandedChatId === ticket.id;
@@ -1961,6 +1970,14 @@
                                             </div>
                                         );
                                     })}
+                                    
+                                    {view === 'archive' && archiveDisplayLimit < filteredTickets.length && (
+                                        <div className="pt-6 pb-2 flex justify-center animate-in fade-in">
+                                            <button onClick={() => setArchiveDisplayLimit(prev => prev + 10)} className="px-6 py-3 rounded-2xl text-xs font-bold bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
+                                                <PlusCircle size={16} /> Carregar Mais Chamados ({filteredTickets.length - archiveDisplayLimit} restantes)
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                                 )}
                                 </>
