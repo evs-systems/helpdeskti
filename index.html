@@ -303,7 +303,6 @@
             const [imageView, setImageView] = useState({ isOpen: false, images: [], currentIndex: 0 });
             const [deferredPrompt, setDeferredPrompt] = useState(null);
             const [lastReadTimes, setLastReadTimes] = useState(() => { try { const saved = localStorage.getItem('helpdesk_read_times'); return saved ? JSON.parse(saved) : {}; } catch { return {}; } });
-            const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
             const [archiveDisplayLimit, setArchiveDisplayLimit] = useState(10);
             const [confirmationModal, setConfirmationModal] = useState(null); 
             const [reportFilterMode, setReportFilterMode] = useState('today');
@@ -318,7 +317,6 @@
             // Refs for Charts
             const lineChartRef = useRef(null);
             const pieChartRef = useRef(null);
-            const chartsInstance = useRef({ line: null, pie: null });
             const isInitialLoadAvisos = useRef(true);
 
             // Inventário
@@ -415,14 +413,59 @@
             const accFilterMenuRef = useRef(null);
             const kanbanStatusMenuRef = useRef(null);
 
+            const dateFilter = useMemo(() => {
+                let start = new Date(), end = new Date();
+                if (reportFilterMode === 'today') { start.setHours(0,0,0,0); end.setHours(23,59,59,999); } 
+                else if (selectedMonth === 'all') { start = new Date(selectedYear, 0, 1); end = new Date(selectedYear, 11, 31, 23, 59, 59); } 
+                else { start = new Date(selectedYear, selectedMonth, 1); end = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59); }
+                const toLocalISO = (d) => { const offset = d.getTimezoneOffset() * 60000; return new Date(d.getTime() - offset).toISOString().split('T')[0]; };
+                return { start: toLocalISO(start), end: toLocalISO(end) };
+            }, [reportFilterMode, selectedMonth, selectedYear]);
+
+            const filteredTickets = useMemo(() => {
+                return tickets.filter(t => {
+                    const matchesAccess = isAdmin || (userSector && userUnit && normalizeSearch(t.department) === normalizeSearch(userSector) && normalizeSearch(t.unit) === normalizeSearch(userUnit));
+                    if (!matchesAccess) return false;
+                    const matchesSearch = (t.requester || '').toLowerCase().includes(searchTerm.toLowerCase()) || (t.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+                    const matchesUnit = !isAdmin || unitFilter === 'Todas' || t.unit === unitFilter;
+                    const matchesPriority = !isAdmin || priorityFilter === 'Todas' || t.priority === priorityFilter;
+                    const matchesType = !isAdmin || typeFilter === 'Todos' || (typeFilter === 'problem' ? (t.type === 'problem' || !t.type) : t.type === typeFilter);
+                    const isFinalized = t.status === 'finalizado';
+                    const isContested = t.status === 'contestado';
+
+                    if (isAdmin) {
+                        if (view === 'reports') {
+                            if (!dateFilter.start || !dateFilter.end) return true;
+                            try {
+                                let ticketDate;
+                                if (t.createdAt?.toDate) ticketDate = t.createdAt.toDate();
+                                else if (t.createdAt?.seconds) ticketDate = new Date(t.createdAt.seconds * 1000);
+                                else if (t.createdAt) ticketDate = new Date(t.createdAt);
+                                else ticketDate = new Date();
+                                
+                                if (isNaN(ticketDate.getTime())) return true;
+                                const offset = ticketDate.getTimezoneOffset() * 60000;
+                                const ticketDateStr = new Date(ticketDate.getTime() - offset).toISOString().split('T')[0];
+                                return ticketDateStr >= dateFilter.start && ticketDateStr <= dateFilter.end;
+                            } catch (e) { return true; }
+                        } 
+                        if (view === 'archive') return isFinalized && matchesSearch && matchesUnit && matchesPriority && matchesType;
+                        if (techViewMode === 'contested') return isContested && matchesSearch && matchesUnit && matchesPriority && matchesType;
+                        if (techViewMode === 'others') return !isFinalized && !isContested && matchesSearch && matchesUnit && matchesPriority && matchesType && (t.technician !== 'Pendente' && t.technician !== techName);
+                        return !isFinalized && !isContested && matchesSearch && matchesUnit && matchesPriority && matchesType && (t.technician === 'Pendente' || t.technician === techName);
+                    }
+                    return view === 'archive' ? isFinalized && matchesSearch : !isFinalized && matchesSearch;
+                });
+            }, [tickets, searchTerm, unitFilter, priorityFilter, typeFilter, isAdmin, userSector, userUnit, view, techViewMode, techName, dateFilter]);
+
             useEffect(() => {
+                let lineChart = null;
+                let pieChart = null;
+
                 if (view === 'reports' && isAdmin && window.Chart && lineChartRef.current && pieChartRef.current) {
                     const ctxLine = lineChartRef.current.getContext('2d');
                     const ctxPie = pieChartRef.current.getContext('2d');
                     
-                    if (chartsInstance.current.line) chartsInstance.current.line.destroy();
-                    if (chartsInstance.current.pie) chartsInstance.current.pie.destroy();
-
                     const textColor = isDarkMode ? '#cbd5e1' : '#64748b';
                     const gridColor = isDarkMode ? '#1e293b' : '#f1f5f9';
 
@@ -433,7 +476,11 @@
                     if (reportFilterMode === 'today') {
                         const hoursData = Array(24).fill(0);
                         filteredTickets.forEach(t => {
-                            const d = t.createdAt?.toDate ? t.createdAt.toDate() : (t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000) : new Date(t.createdAt));
+                            let d;
+                            if (t.createdAt?.toDate) d = t.createdAt.toDate();
+                            else if (t.createdAt?.seconds) d = new Date(t.createdAt.seconds * 1000);
+                            else if (t.createdAt) d = new Date(t.createdAt);
+                            else d = new Date();
                             if(d && !isNaN(d.getTime())) hoursData[d.getHours()] += 1;
                         });
                         lineLabels.push(...Array.from({length: 24}, (_, i) => `${i}h`));
@@ -441,7 +488,11 @@
                     } else if (isYearly) {
                         const monthsData = Array(12).fill(0);
                         filteredTickets.forEach(t => {
-                            const d = t.createdAt?.toDate ? t.createdAt.toDate() : (t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000) : new Date(t.createdAt));
+                            let d;
+                            if (t.createdAt?.toDate) d = t.createdAt.toDate();
+                            else if (t.createdAt?.seconds) d = new Date(t.createdAt.seconds * 1000);
+                            else if (t.createdAt) d = new Date(t.createdAt);
+                            else d = new Date();
                             if(d && !isNaN(d.getTime())) monthsData[d.getMonth()] += 1;
                         });
                         lineLabels.push(...MONTHS.map(m => m.substring(0,3)));
@@ -452,7 +503,11 @@
                         const daysInMonth = new Date(currentYearForCalc, currentMonthForCalc + 1, 0).getDate();
                         const daysData = Array(daysInMonth).fill(0);
                         filteredTickets.forEach(t => {
-                            const d = t.createdAt?.toDate ? t.createdAt.toDate() : (t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000) : new Date(t.createdAt));
+                            let d;
+                            if (t.createdAt?.toDate) d = t.createdAt.toDate();
+                            else if (t.createdAt?.seconds) d = new Date(t.createdAt.seconds * 1000);
+                            else if (t.createdAt) d = new Date(t.createdAt);
+                            else d = new Date();
                             if(d && !isNaN(d.getTime())) {
                                 const dayIndex = d.getDate() - 1;
                                 if(dayIndex >= 0 && dayIndex < daysInMonth) {
@@ -467,7 +522,7 @@
                     const problemas = filteredTickets.filter(t => t.type !== 'request').length;
                     const solicitacoes = filteredTickets.filter(t => t.type === 'request').length;
 
-                    chartsInstance.current.line = new window.Chart(ctxLine, {
+                    lineChart = new window.Chart(ctxLine, {
                         type: 'line',
                         data: {
                             labels: lineLabels,
@@ -497,7 +552,7 @@
                         }
                     });
 
-                    chartsInstance.current.pie = new window.Chart(ctxPie, {
+                    pieChart = new window.Chart(ctxPie, {
                         type: 'doughnut',
                         data: {
                             labels: ['Problemas Técnicos', 'Solicitações'],
@@ -519,7 +574,12 @@
                         }
                     });
                 }
-            }, [view, filteredTickets, isDarkMode, reportFilterMode, selectedMonth, selectedYear]);
+                
+                return () => {
+                    if (lineChart) lineChart.destroy();
+                    if (pieChart) pieChart.destroy();
+                };
+            }, [view, filteredTickets, isDarkMode, reportFilterMode, selectedMonth, selectedYear, isAdmin]);
 
             useEffect(() => {
                 setPersistence(auth, browserLocalPersistence).catch(() => {});
@@ -864,15 +924,6 @@
                 } catch(e) { showToast("Erro ao remover anexo.", "error"); } finally { setIsSubmitting(false); }
             };
 
-            useEffect(() => {
-                let start = new Date(), end = new Date();
-                if (reportFilterMode === 'today') { start.setHours(0,0,0,0); end.setHours(23,59,59,999); } 
-                else if (selectedMonth === 'all') { start = new Date(selectedYear, 0, 1); end = new Date(selectedYear, 11, 31, 23, 59, 59); } 
-                else { start = new Date(selectedYear, selectedMonth, 1); end = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59); }
-                const toLocalISO = (d) => { const offset = d.getTimezoneOffset() * 60000; return new Date(d.getTime() - offset).toISOString().split('T')[0]; };
-                setDateFilter({ start: toLocalISO(start), end: toLocalISO(end) });
-            }, [reportFilterMode, selectedMonth, selectedYear]);
-
             const setPresetDate = (mode) => {
                 const today = new Date();
                 if (mode === 'today') { 
@@ -891,37 +942,6 @@
                     setSelectedYear(today.getFullYear()); 
                 }
             };
-
-            const filteredTickets = useMemo(() => {
-                return tickets.filter(t => {
-                    const matchesAccess = isAdmin || (userSector && userUnit && normalizeSearch(t.department) === normalizeSearch(userSector) && normalizeSearch(t.unit) === normalizeSearch(userUnit));
-                    if (!matchesAccess) return false;
-                    const matchesSearch = (t.requester || '').toLowerCase().includes(searchTerm.toLowerCase()) || (t.description || '').toLowerCase().includes(searchTerm.toLowerCase());
-                    const matchesUnit = !isAdmin || unitFilter === 'Todas' || t.unit === unitFilter;
-                    const matchesPriority = !isAdmin || priorityFilter === 'Todas' || t.priority === priorityFilter;
-                    const matchesType = !isAdmin || typeFilter === 'Todos' || (typeFilter === 'problem' ? (t.type === 'problem' || !t.type) : t.type === typeFilter);
-                    const isFinalized = t.status === 'finalizado';
-                    const isContested = t.status === 'contestado';
-
-                    if (isAdmin) {
-                        if (view === 'reports') {
-                            if (!t.createdAt || !dateFilter.start || !dateFilter.end) return true;
-                            try {
-                                let ticketDate = t.createdAt?.toDate ? t.createdAt.toDate() : (t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000) : new Date(t.createdAt));
-                                if (isNaN(ticketDate.getTime())) return true;
-                                const offset = ticketDate.getTimezoneOffset() * 60000;
-                                const ticketDateStr = new Date(ticketDate.getTime() - offset).toISOString().split('T')[0];
-                                return ticketDateStr >= dateFilter.start && ticketDateStr <= dateFilter.end;
-                            } catch (e) { return true; }
-                        } 
-                        if (view === 'archive') return isFinalized && matchesSearch && matchesUnit && matchesPriority && matchesType;
-                        if (techViewMode === 'contested') return isContested && matchesSearch && matchesUnit && matchesPriority && matchesType;
-                        if (techViewMode === 'others') return !isFinalized && !isContested && matchesSearch && matchesUnit && matchesPriority && matchesType && (t.technician !== 'Pendente' && t.technician !== techName);
-                        return !isFinalized && !isContested && matchesSearch && matchesUnit && matchesPriority && matchesType && (t.technician === 'Pendente' || t.technician === techName);
-                    }
-                    return view === 'archive' ? isFinalized && matchesSearch : !isFinalized && matchesSearch;
-                });
-            }, [tickets, searchTerm, unitFilter, priorityFilter, typeFilter, isAdmin, userSector, userUnit, view, techViewMode, techName, dateFilter]);
 
             const paginatedTickets = useMemo(() => {
                 return view === 'archive' ? filteredTickets.slice(0, archiveDisplayLimit) : filteredTickets;
