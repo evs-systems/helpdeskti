@@ -1976,15 +1976,36 @@
                                                     {isAdmin && (<div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl"><button onClick={() => { setActiveChatTab('public'); markAsRead(ticket.id, 'public'); }} className={`relative px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${activeChatTab === 'public' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>Público{hasPublicUnread && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></div>}</button><button onClick={() => { setActiveChatTab('internal'); markAsRead(ticket.id, 'internal'); }} className={`relative px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 ${activeChatTab === 'internal' ? 'bg-white dark:bg-slate-700 text-orange-600 dark:text-orange-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}><EyeOff size={12} /> Interno{hasInternalUnread && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></div>}</button></div>)}
                                                     </div>
                                                     <div className={`rounded-3xl p-4 mb-4 max-h-[400px] overflow-y-auto space-y-4 shadow-inner scroll-smooth custom-scrollbar ${activeChatTab === 'internal' ? 'bg-orange-50/50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-900/30 border' : 'bg-slate-100/50 dark:bg-slate-950/30'}`}>
-                                                    {((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages)?.length > 0 ? (((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages).map((m, idx) => (
-                                                        <div key={idx} className={`flex flex-col ${m.senderRole === 'tech' ? 'items-start' : 'items-end'}`}>
-                                                            <span className="text-[10px] font-bold text-slate-400 mb-1 px-2">{m.sender} • {formatTimestamp({toDate: () => new Date(m.timestamp)})}</span>
-                                                            <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm shadow-sm transition-all overflow-hidden ${m.senderRole === 'tech' ? (activeChatTab === 'internal' ? 'bg-orange-100 text-orange-900' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100') : 'bg-blue-600 text-white shadow-lg shadow-blue-500/10'}`}>
-                                                                {m.image && (<div className="mb-2 -mx-2 -mt-2 group relative cursor-zoom-in" onClick={() => openImageViewer(m.image, ticket)}><img src={m.image} alt="Anexo" className="w-full h-auto rounded-t-xl max-h-60 object-cover" /><div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center"><Maximize2 className="text-white opacity-0 group-hover:opacity-100 drop-shadow-md" size={24} /></div></div>)}
-                                                                {m.text && <p className="whitespace-pre-wrap break-words">{m.text}</p>}
+                                                    {((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages)?.length > 0 ? (((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages).map((m, idx) => {
+                                                        const isInternal = activeChatTab === 'internal';
+                                                        const isMyMessage = m.sender === techName;
+                                                        
+                                                        let alignmentClass = m.senderRole === 'tech' ? 'items-start' : 'items-end';
+                                                        if (isInternal) {
+                                                            alignmentClass = isMyMessage ? 'items-end' : 'items-start';
+                                                        }
+                                                        
+                                                        let bubbleClass = '';
+                                                        if (isInternal) {
+                                                            if (isMyMessage) {
+                                                                bubbleClass = 'bg-orange-500 text-white shadow-md shadow-orange-500/20';
+                                                            } else {
+                                                                bubbleClass = 'bg-orange-100 dark:bg-orange-900/60 text-orange-900 dark:text-orange-100 border border-orange-200 dark:border-orange-800/50';
+                                                            }
+                                                        } else {
+                                                            bubbleClass = m.senderRole === 'tech' ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border dark:border-slate-700' : 'bg-blue-600 text-white shadow-lg shadow-blue-500/10';
+                                                        }
+
+                                                        return (
+                                                            <div key={idx} className={`flex flex-col ${alignmentClass}`}>
+                                                                <span className="text-[10px] font-bold text-slate-400 mb-1 px-2">{m.sender} • {formatTimestamp({toDate: () => new Date(m.timestamp)})}</span>
+                                                                <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm shadow-sm transition-all overflow-hidden ${bubbleClass}`}>
+                                                                    {m.image && (<div className="mb-2 -mx-2 -mt-2 group relative cursor-zoom-in" onClick={() => openImageViewer(m.image, ticket)}><img src={m.image} alt="Anexo" className="w-full h-auto rounded-t-xl max-h-60 object-cover" /><div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center"><Maximize2 className="text-white opacity-0 group-hover:opacity-100 drop-shadow-md" size={24} /></div></div>)}
+                                                                    {m.text && <p className="whitespace-pre-wrap break-words">{m.text}</p>}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    ))) : (<div className="py-12 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest italic opacity-60">Nenhuma mensagem registrada</div>)}
+                                                        );
+                                                    })) : (<div className="py-12 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest italic opacity-60">Nenhuma mensagem registrada</div>)}
                                                     <div ref={chatEndRef} />
                                                     </div>
                                                     <div className="relative">
