@@ -464,9 +464,8 @@
                         lineData.push(...daysData);
                     }
 
-                    const abertos = filteredTickets.filter(t => t.status !== 'finalizado').length;
-                    const problemas = filteredTickets.filter(t => t.status === 'finalizado' && t.type !== 'request').length;
-                    const solicitacoes = filteredTickets.filter(t => t.status === 'finalizado' && t.type === 'request').length;
+                    const problemas = filteredTickets.filter(t => t.type !== 'request').length;
+                    const solicitacoes = filteredTickets.filter(t => t.type === 'request').length;
 
                     chartsInstance.current.line = new window.Chart(ctxLine, {
                         type: 'line',
