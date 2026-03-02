@@ -875,9 +875,21 @@
 
             const setPresetDate = (mode) => {
                 const today = new Date();
-                if (mode === 'today') { setReportFilterMode('today'); } 
-                else if (mode === 'month') { setReportFilterMode('custom'); setSelectedMonth(today.getMonth()); setSelectedYear(today.getFullYear()); } 
-                else if (mode === 'year') { setReportFilterMode('custom'); setSelectedMonth('all'); setSelectedYear(today.getFullYear()); }
+                if (mode === 'today') { 
+                    setReportFilterMode('today'); 
+                    setSelectedMonth(today.getMonth()); 
+                    setSelectedYear(today.getFullYear()); 
+                } 
+                else if (mode === 'month') { 
+                    setReportFilterMode('custom'); 
+                    setSelectedMonth(today.getMonth()); 
+                    setSelectedYear(today.getFullYear()); 
+                } 
+                else if (mode === 'year') { 
+                    setReportFilterMode('custom'); 
+                    setSelectedMonth('all'); 
+                    setSelectedYear(today.getFullYear()); 
+                }
             };
 
             const filteredTickets = useMemo(() => {
