@@ -345,10 +345,12 @@
             const [eqSearchTerm, setEqSearchTerm] = useState('');
             const [eqDisplayLimit, setEqDisplayLimit] = useState(20);
             const [accTypeFilter, setAccTypeFilter] = useState('Todos');
+            const [accUnitFilter, setAccUnitFilter] = useState('Todas');
             const [isEqFilterMenuOpen, setIsEqFilterMenuOpen] = useState(false);
             const [isEqUnitMenuOpen, setIsEqUnitMenuOpen] = useState(false);
             const [isEqStatusMenuOpen, setIsEqStatusMenuOpen] = useState(false);
             const [isAccFilterMenuOpen, setIsAccFilterMenuOpen] = useState(false);
+            const [isAccUnitFilterMenuOpen, setIsAccUnitFilterMenuOpen] = useState(false);
 
             // Acessórios - Views e Filtros
             const [accViewMode, setAccViewMode] = useState('stock'); 
@@ -415,6 +417,7 @@
             const eqUnitMenuRef = useRef(null);
             const eqStatusMenuRef = useRef(null);
             const accFilterMenuRef = useRef(null);
+            const accUnitFilterMenuRef = useRef(null);
             const kanbanStatusMenuRef = useRef(null);
 
             const dateFilter = useMemo(() => {
@@ -682,6 +685,7 @@
                     if (eqUnitMenuRef.current && !eqUnitMenuRef.current.contains(event.target)) setIsEqUnitMenuOpen(false);
                     if (eqStatusMenuRef.current && !eqStatusMenuRef.current.contains(event.target)) setIsEqStatusMenuOpen(false);
                     if (accFilterMenuRef.current && !accFilterMenuRef.current.contains(event.target)) setIsAccFilterMenuOpen(false);
+                    if (accUnitFilterMenuRef.current && !accUnitFilterMenuRef.current.contains(event.target)) setIsAccUnitFilterMenuOpen(false);
                     if (kanbanStatusMenuRef.current && !kanbanStatusMenuRef.current.contains(event.target)) setIsKanbanStatusMenuOpen(false);
                     if (recurrenceMenuRef.current && !recurrenceMenuRef.current.contains(event.target)) setIsRecurrenceMenuOpen(false);
                     if (accMoveMonthMenuRef.current && !accMoveMonthMenuRef.current.contains(event.target)) setIsAccMoveMonthMenuOpen(false);
@@ -998,7 +1002,11 @@
             }, [inventoryTab, eqTypeFilter, eqUnitFilter, eqStatusFilter, eqSearchTerm]);
 
             const decommissionedEquipments = useMemo(() => equipments.filter(eq => eq.status === 'baixado' && (!eqSearchTerm || (eq.model && eq.model.toLowerCase().includes(eqSearchTerm.toLowerCase())) || (eq.deviceId && eq.deviceId.toLowerCase().includes(eqSearchTerm.toLowerCase())) || (eq.serialNumber && eq.serialNumber.toLowerCase().includes(eqSearchTerm.toLowerCase())) || (eq.ipAddress && eq.ipAddress.toLowerCase().includes(eqSearchTerm.toLowerCase())))), [equipments, eqSearchTerm]);
-            const filteredAccessories = useMemo(() => accessories.filter(acc => accTypeFilter === 'Todos' || acc.type === accTypeFilter), [accessories, accTypeFilter]);
+            
+            const filteredAccessories = useMemo(() => accessories.filter(acc => 
+                (accTypeFilter === 'Todos' || acc.type === accTypeFilter) && 
+                (accUnitFilter === 'Todas' || acc.unit === accUnitFilter || (accUnitFilter === 'Nenhuma' && !acc.unit))
+            ), [accessories, accTypeFilter, accUnitFilter]);
 
             const filteredMovements = useMemo(() => {
                 let moves = [];
@@ -1587,10 +1595,22 @@
 
                                 {accViewMode === 'stock' && (
                                     <>
-                                    <div className="flex bg-white dark:bg-slate-900 border dark:border-slate-800 p-4 rounded-2xl shadow-sm">
+                                    <div className="flex flex-wrap gap-4 bg-white dark:bg-slate-900 border dark:border-slate-800 p-4 rounded-2xl shadow-sm">
                                     <div className="relative w-full md:w-64" ref={accFilterMenuRef}>
                                         <button onClick={() => setIsAccFilterMenuOpen(!isAccFilterMenuOpen)} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><div className="flex items-center gap-2 overflow-hidden"><Filter size={16} className="text-blue-500 flex-shrink-0" /><span className="truncate">{accTypeFilter === 'Todos' ? 'Filtrar por Tipo' : accTypeFilter}</span></div><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isAccFilterMenuOpen ? 'rotate-180' : ''}`} /></button>
                                         {isAccFilterMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar"><button onClick={() => { setAccTypeFilter('Todos'); setIsAccFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Tipos {accTypeFilter === 'Todos' && <Check size={12} className="text-blue-600" />}</button><div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />{ACCESSORY_TYPES.map(t => (<button key={t} onClick={() => { setAccTypeFilter(t); setIsAccFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{t} {accTypeFilter === t && <Check size={12} className="text-blue-600" />}</button>))}</div>)}
+                                    </div>
+                                    <div className="relative w-full md:w-64" ref={accUnitFilterMenuRef}>
+                                        <button onClick={() => setIsAccUnitFilterMenuOpen(!isAccUnitFilterMenuOpen)} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><div className="flex items-center gap-2 overflow-hidden"><Building2 size={16} className="text-blue-500 flex-shrink-0" /><span className="truncate">{accUnitFilter === 'Todas' ? 'Filtrar por Unidade' : accUnitFilter}</span></div><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isAccUnitFilterMenuOpen ? 'rotate-180' : ''}`} /></button>
+                                        {isAccUnitFilterMenuOpen && (
+                                            <div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
+                                                <button onClick={() => { setAccUnitFilter('Todas'); setIsAccUnitFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todas as Unidades {accUnitFilter === 'Todas' && <Check size={12} className="text-blue-600" />}</button>
+                                                <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
+                                                <button onClick={() => { setAccUnitFilter('Nenhuma'); setIsAccUnitFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 italic flex items-center justify-between">Nenhuma / Uso Geral {accUnitFilter === 'Nenhuma' && <Check size={12} className="text-blue-600" />}</button>
+                                                <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
+                                                {UNIT_QUICK_FILTERS.map(u => (<button key={u} onClick={() => { setAccUnitFilter(u); setIsAccUnitFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{u} {accUnitFilter === u && <Check size={12} className="text-blue-600" />}</button>))}
+                                            </div>
+                                        )}
                                     </div>
                                     </div>
 
