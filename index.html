@@ -105,10 +105,10 @@
             Building2, ChevronDown, Check, ArrowUpCircle, EyeOff, UserPlus, StickyNote, Users, MapPin, X, ChevronRight, ChevronLeft, AlignLeft,
             AlertTriangle, RotateCcw, UserMinus, ShieldAlert, BarChart3, Filter, FileText, Image as ImageIcon, Paperclip, Wrench, Edit, Trash2,
             PackagePlus, Plus, Minus, Maximize2, Layers, Download, AlertOctagon, Terminal, Database, Smartphone, Mouse, Keyboard, Headphones, Cpu,
-            HardDrive, ArrowLeftRight, ArchiveRestore, Kanban, BookOpen, ListTodo, CheckSquare, Repeat, Circle, Megaphone, Info
+            HardDrive, ArrowLeftRight, ArchiveRestore, Kanban, BookOpen, ListTodo, CheckSquare, Repeat, Circle, Megaphone, Info, Menu
         } from 'lucide-react';
         import { initializeApp, getApps, getApp } from 'firebase/app';
-        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, arrayUnion, deleteDoc } from 'firebase/firestore';
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, arrayUnion, deleteDoc, setDoc } from 'firebase/firestore';
         import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
         import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
@@ -313,6 +313,53 @@
             const [firebaseError, setFirebaseError] = useState(null);
             const [isDarkMode, setIsDarkMode] = useState(() => { try { return localStorage.getItem('helpdesk_dark_mode') === 'true'; } catch { return false; } });
             const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+            const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+            // Scroll Tracking para o Chat vs Rodapé
+            const scrollAreaRef = useRef(null);
+            const footerRef = useRef(null);
+            const [chatBottomPos, setChatBottomPos] = useState(24);
+
+            const handleScroll = () => {
+                if (!scrollAreaRef.current || !footerRef.current) return;
+                const scrollArea = scrollAreaRef.current;
+                const footer = footerRef.current;
+                
+                // Calcula a distância exata até o fim da página
+                const distanceToBottom = Math.max(0, scrollArea.scrollHeight - scrollArea.scrollTop - scrollArea.clientHeight);
+                const footerHeight = footer.offsetHeight;
+                
+                // Se a distância for menor que o tamanho do rodapé (significa que o rodapé apareceu na tela), sobe o chat
+                if (distanceToBottom < footerHeight) {
+                    setChatBottomPos(24 + (footerHeight - distanceToBottom));
+                } else {
+                    setChatBottomPos(24); // 24px é o padrão (equivalente ao bottom-6 do tailwind)
+                }
+            };
+
+            useEffect(() => {
+                handleScroll();
+                window.addEventListener('resize', handleScroll);
+                return () => window.removeEventListener('resize', handleScroll);
+            }, [view, isGcOpen]);
+
+            // Global Chat States
+            const [isGcOpen, setIsGcOpen] = useState(false);
+            const [gcUser, setGcUser] = useState(() => { 
+                try { 
+                    const savedUser = localStorage.getItem('helpdesk_gc_user');
+                    return savedUser ? JSON.parse(savedUser) : null; 
+                } catch { 
+                    return null; 
+                } 
+            });
+            const [globalChats, setGlobalChats] = useState([]);
+            const [gcActiveRoom, setGcActiveRoom] = useState(null);
+            const [gcReadTimes, setGcReadTimes] = useState(() => { try { return JSON.parse(localStorage.getItem('helpdesk_gc_reads')) || {}; } catch { return {}; } });
+            const [gcUserForm, setGcUserForm] = useState({ name: '', unit: '', sector: '' });
+            const [isGcUnitMenuOpen, setIsGcUnitMenuOpen] = useState(false);
+            const gcUnitMenuRef = useRef(null);
+            const gcEndRef = useRef(null);
 
             // Refs for Charts
             const lineChartRef = useRef(null);
@@ -624,7 +671,115 @@
 
             useEffect(() => { localStorage.setItem('helpdesk_read_times', JSON.stringify(lastReadTimes)); }, [lastReadTimes]);
             useEffect(() => { localStorage.setItem('helpdesk_dark_mode', isDarkMode); }, [isDarkMode]);
+            useEffect(() => { localStorage.setItem('helpdesk_gc_reads', JSON.stringify(gcReadTimes)); }, [gcReadTimes]);
             useEffect(() => { setDailyPhrase(MOTIVATIONAL_PHRASES[Math.floor(Math.random() * MOTIVATIONAL_PHRASES.length)]); }, []);
+            
+            // Garantir que as informações do usuário do chat sejam mantidas atualizadas no storage
+            useEffect(() => {
+                if (gcUser) {
+                    localStorage.setItem('helpdesk_gc_user', JSON.stringify(gcUser));
+                } else {
+                    localStorage.removeItem('helpdesk_gc_user');
+                }
+            }, [gcUser]);
+
+            // Global Chat Effect
+            useEffect(() => {
+                if (!user) return;
+                const unsub = onSnapshot(collection(db, 'global_chats'), (snapshot) => {
+                    const chats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setGlobalChats(chats);
+                }, (err) => { 
+                    console.warn("Erro no chat global:", err); 
+                    if(err.code === 'permission-denied' && isAdmin) showToast("Adicione regras no Firebase para a coleção global_chats", "warning"); 
+                });
+                return () => unsub();
+            }, [user, isAdmin]);
+
+            const hasGcUnreadGlobal = useMemo(() => {
+                if (isAdmin) {
+                    return globalChats.some(room => {
+                        if (room.id === 'internal_tech_room') return false;
+                        const lastMsg = room.messages?.[room.messages.length - 1];
+                        return lastMsg && lastMsg.senderRole === 'user' && lastMsg.timestamp > (gcReadTimes[room.id] || "0");
+                    });
+                } else if (gcUser) {
+                    const roomId = `${normalizeSearch(gcUser.unit)}_${normalizeSearch(gcUser.sector)}`;
+                    const room = globalChats.find(c => c.id === roomId);
+                    if (!room) return false;
+                    const lastMsg = room.messages?.[room.messages.length - 1];
+                    return lastMsg && lastMsg.senderRole === 'tech' && lastMsg.timestamp > (gcReadTimes[roomId] || "0");
+                }
+                return false;
+            }, [globalChats, gcReadTimes, isAdmin, gcUser]);
+
+            const hasGcUnreadInternal = useMemo(() => {
+                if (isAdmin) {
+                    const internalRoom = globalChats.find(c => c.id === 'internal_tech_room');
+                    if (!internalRoom) return false;
+                    const lastMsg = internalRoom.messages?.[internalRoom.messages.length - 1];
+                    return lastMsg && lastMsg.sender !== techName && lastMsg.timestamp > (gcReadTimes['internal_tech_room'] || "0");
+                }
+                return false;
+            }, [globalChats, gcReadTimes, isAdmin, techName]);
+
+            const markGcAsRead = (roomId) => {
+                setGcReadTimes(prev => {
+                    const newTimes = { ...prev, [roomId]: new Date().toISOString() };
+                    localStorage.setItem('helpdesk_gc_reads', JSON.stringify(newTimes));
+                    return newTimes;
+                });
+            };
+
+            useEffect(() => {
+                if (isGcOpen) {
+                    if (!isAdmin && gcUser) markGcAsRead(`${normalizeSearch(gcUser.unit)}_${normalizeSearch(gcUser.sector)}`);
+                    else if (isAdmin && gcActiveRoom) markGcAsRead(gcActiveRoom);
+                    setTimeout(() => gcEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 150);
+                }
+            }, [isGcOpen, gcActiveRoom, globalChats, isAdmin, gcUser]);
+
+            const handleStartGc = (e) => {
+                e.preventDefault();
+                if (!gcUserForm.name.trim() || !gcUserForm.unit || !gcUserForm.sector.trim()) return;
+                const newUser = { name: formatName(gcUserForm.name), unit: gcUserForm.unit, sector: gcUserForm.sector.trim() };
+                setGcUser(newUser);
+                // O useEffect acima já vai cuidar do localStorage
+            };
+
+            const handleSendGcMessage = async (e) => {
+                e.preventDefault();
+                const input = e.target.gcMsgInput;
+                const text = input.value.trim();
+                if (!text) return;
+                
+                const roomId = isAdmin ? gcActiveRoom : `${normalizeSearch(gcUser.unit)}_${normalizeSearch(gcUser.sector)}`;
+                const roomName = isAdmin ? (roomId === 'internal_tech_room' ? 'Chat Interno TI' : globalChats.find(c => c.id === roomId)?.name || roomId) : `${formatDisplay(gcUser.unit)} - ${formatDisplay(gcUser.sector)}`;
+                
+                const newMessage = {
+                    id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+                    text,
+                    sender: isAdmin ? techName : gcUser.name,
+                    senderRole: isAdmin ? 'tech' : 'user',
+                    timestamp: new Date().toISOString()
+                };
+
+                input.value = '';
+                input.style.height = 'auto';
+                
+                const docRef = doc(db, 'global_chats', roomId);
+                const roomExists = globalChats.some(c => c.id === roomId);
+                
+                try {
+                    if (roomExists) {
+                        await updateDoc(docRef, { messages: arrayUnion(newMessage), lastUpdated: serverTimestamp() });
+                    } else {
+                        await setDoc(docRef, { unit: isAdmin ? 'TI' : gcUser.unit, sector: isAdmin ? 'Interno' : gcUser.sector, name: roomName, messages: [newMessage], createdAt: serverTimestamp(), lastUpdated: serverTimestamp() });
+                    }
+                    markGcAsRead(roomId);
+                    setTimeout(() => gcEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+                } catch (error) { showToast("Erro ao enviar mensagem", "error"); }
+            };
 
             const requestNotificationPermission = async () => {
                 if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
@@ -691,6 +846,7 @@
                     if (accMoveMonthMenuRef.current && !accMoveMonthMenuRef.current.contains(event.target)) setIsAccMoveMonthMenuOpen(false);
                     if (accMoveYearMenuRef.current && !accMoveYearMenuRef.current.contains(event.target)) setIsAccMoveYearMenuOpen(false);
                     if (accMoveTypeMenuRef.current && !accMoveTypeMenuRef.current.contains(event.target)) setIsAccMoveTypeMenuOpen(false);
+                    if (gcUnitMenuRef.current && !gcUnitMenuRef.current.contains(event.target)) setIsGcUnitMenuOpen(false);
                 }
                 document.addEventListener("mousedown", handleClickOutside);
                 return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -1265,7 +1421,7 @@
             };
 
             return (
-                <div className={`h-screen overflow-y-auto overflow-x-hidden flex flex-col font-sans transition-colors duration-300 ${isDarkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`} style={{ colorScheme: isDarkMode ? 'dark' : 'light', '--scrollbar-track': isDarkMode ? '#020617' : '#f8fafc', '--scrollbar-thumb': isDarkMode ? '#334155' : '#cbd5e1', '--scrollbar-hover': isDarkMode ? '#475569' : '#94a3b8' }}>
+                <div ref={scrollAreaRef} onScroll={handleScroll} className={`h-screen overflow-y-auto overflow-x-hidden flex flex-col font-sans transition-colors duration-300 ${isDarkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`} style={{ colorScheme: isDarkMode ? 'dark' : 'light', '--scrollbar-track': isDarkMode ? '#020617' : '#f8fafc', '--scrollbar-thumb': isDarkMode ? '#334155' : '#cbd5e1', '--scrollbar-hover': isDarkMode ? '#475569' : '#94a3b8' }}>
                     <style>{customScrollStyles}</style>
                     {firebaseError && (<div className="fixed inset-0 z-[100] bg-slate-900/95 flex items-center justify-center p-4"><div className="bg-white dark:bg-slate-800 p-8 rounded-3xl max-w-lg w-full border border-red-500 shadow-2xl relative overflow-hidden"><div className="absolute top-0 left-0 w-full h-2 bg-red-500"></div><div className="flex items-center gap-3 mb-4 text-red-600 dark:text-red-400"><AlertOctagon size={48} /><h2 className="text-2xl font-black leading-tight">Configuração Necessária</h2></div><p className="text-slate-600 dark:text-slate-300 mb-6 font-medium text-lg">{firebaseError.title}</p><div className="bg-slate-100 dark:bg-slate-950 rounded-xl p-4 mb-6 border border-slate-200 dark:border-slate-800"><p className="text-sm text-slate-500 mb-2 font-bold uppercase tracking-widest flex items-center gap-2"><Terminal size={14}/> Console do Firebase</p><p className="text-sm font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{firebaseError.message}</p></div><button onClick={() => setFirebaseError(null)} className="w-full py-4 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-white rounded-xl font-bold hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Entendi, vou configurar</button></div></div>)}
                     <ImageViewer isOpen={imageView.isOpen} onClose={closeImageViewer} images={imageView.images} currentIndex={imageView.currentIndex} onNext={handleNextImage} onPrev={handlePrevImage} />
@@ -1288,28 +1444,71 @@
 
                     <header className="bg-white border-b sticky top-0 z-30 shadow-sm dark:bg-slate-900 dark:border-slate-800">
                         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-                        <div className="flex items-center gap-2 cursor-pointer" onClick={() => { if (isAdmin) { setView('dashboard'); } else { setView('landing'); } setTechViewMode('active'); }}>
-                            <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20"><ClipboardList size={20} /></div>
-                            <h1 className="text-xl font-black text-slate-800 dark:text-white tracking-tight">HelpDesk <span className="text-blue-600 font-medium">TI</span></h1>
+                            <div className="flex items-center gap-2 cursor-pointer" onClick={() => { if (isAdmin) { setView('dashboard'); } else { setView('landing'); } setTechViewMode('active'); setIsMobileMenuOpen(false); }}>
+                                <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20"><ClipboardList size={20} /></div>
+                                <h1 className="text-xl font-black text-slate-800 dark:text-white tracking-tight">HelpDesk <span className="text-blue-600 font-medium">TI</span></h1>
+                            </div>
+
+                            {/* --- MENU DESKTOP (Telas Grandes) --- */}
+                            <div className="hidden lg:flex items-center gap-2">
+                                {isAdmin && view !== 'landing' && view !== 'login' && (
+                                    <>
+                                    <button onClick={() => setView(view === 'checklists' ? 'dashboard' : 'checklists')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${view === 'checklists' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`} title="Checklists"><ListTodo size={18} /><span>Checklists</span></button>
+                                    <button onClick={() => setView(view === 'kanban' ? 'dashboard' : 'kanban')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${view === 'kanban' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`} title="Atividades"><Kanban size={18} /><span>Atividades</span></button>
+                                    <button onClick={() => setView(view === 'inventory' ? 'dashboard' : 'inventory')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${view === 'inventory' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`} title="Inventários"><Database size={18} /><span>Inventários</span></button>
+                                    <button onClick={() => setView(view === 'reports' ? 'dashboard' : 'reports')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${view === 'reports' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`} title="Relatórios"><BarChart3 size={18} /><span>Relatórios</span></button>
+                                    </>
+                                )}
+                                {!isAdmin && view !== 'landing' && view !== 'new' && (<button onClick={() => setView('new')} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold shadow-lg shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all mr-2"><PlusCircle size={18} /> <span>Novo Chamado</span></button>)}
+                                {deferredPrompt && (<button onClick={handleInstallClick} className="p-2 rounded-xl text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 transition-all animate-pulse" title="Instalar App"><Download size={20} /></button>)}
+                                {isAdmin && (<button onClick={() => setIsAnnouncementModalOpen(true)} className="p-2 rounded-xl transition-all text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20 active:scale-95" title="Avisos Globais"><Megaphone size={20} /></button>)}
+                                <button onClick={() => setIsAudioEnabled(!isAudioEnabled)} className={`p-2 rounded-xl transition-all ${isAudioEnabled ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>{isAudioEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}</button>
+                                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">{isDarkMode ? <Sun size={20} /> : <Moon size={20} />}</button>
+                                <div className="h-6 w-[1px] bg-slate-200 mx-2 dark:bg-slate-700"></div>
+                                {!isAdmin ? (<button onClick={() => setView('login')} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 transition-all"><Lock size={16} /> <span>TI</span></button>) : (<button onClick={handleLogout} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 transition-all"><LogOut size={16} /> <span>Sair</span></button>)}
+                            </div>
+
+                            {/* --- MENU MOBILE (Telas Pequenas) --- */}
+                            <div className="flex lg:hidden items-center gap-2">
+                                {deferredPrompt && (<button onClick={handleInstallClick} className="p-2 rounded-xl text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 transition-all animate-pulse" title="Instalar App"><Download size={20} /></button>)}
+                                <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                                    {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+                                </button>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            {isAdmin && view !== 'landing' && view !== 'login' && (
-                                <>
-                                <button onClick={() => setView(view === 'checklists' ? 'dashboard' : 'checklists')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${view === 'checklists' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`} title="Checklists"><ListTodo size={18} /><span className="hidden md:inline">Checklists</span></button>
-                                <button onClick={() => setView(view === 'kanban' ? 'dashboard' : 'kanban')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${view === 'kanban' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`} title="Atividades"><Kanban size={18} /><span className="hidden md:inline">Atividades</span></button>
-                                <button onClick={() => setView(view === 'inventory' ? 'dashboard' : 'inventory')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${view === 'inventory' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`} title="Inventários"><Database size={18} /><span className="hidden md:inline">Inventários</span></button>
-                                <button onClick={() => setView(view === 'reports' ? 'dashboard' : 'reports')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${view === 'reports' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`} title="Relatórios"><BarChart3 size={18} /><span className="hidden md:inline">Relatórios</span></button>
-                                </>
-                            )}
-                            {!isAdmin && view !== 'landing' && view !== 'new' && (<button onClick={() => setView('new')} className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold shadow-lg shadow-blue-500/20 hover:scale-105 active:scale-95 transition-all mr-2"><PlusCircle size={18} /> <span className="hidden sm:inline">Novo Chamado</span></button>)}
-                            {deferredPrompt && (<button onClick={handleInstallClick} className="p-2 rounded-xl text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 transition-all animate-pulse" title="Instalar App"><Download size={20} /></button>)}
-                            {isAdmin && (<button onClick={() => setIsAnnouncementModalOpen(true)} className="p-2 rounded-xl transition-all text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20 active:scale-95" title="Avisos Globais"><Megaphone size={20} /></button>)}
-                            <button onClick={() => setIsAudioEnabled(!isAudioEnabled)} className={`p-2 rounded-xl transition-all ${isAudioEnabled ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>{isAudioEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}</button>
-                            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">{isDarkMode ? <Sun size={20} /> : <Moon size={20} />}</button>
-                            <div className="h-6 w-[1px] bg-slate-200 mx-2 dark:bg-slate-700"></div>
-                            {!isAdmin ? (<button onClick={() => setView('login')} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 transition-all"><Lock size={16} /> <span className="hidden sm:inline">TI</span></button>) : (<button onClick={handleLogout} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 transition-all"><LogOut size={16} /> <span className="hidden sm:inline">Sair</span></button>)}
-                        </div>
-                        </div>
+
+                        {/* PAINEL EXPANSÍVEL MOBILE */}
+                        {isMobileMenuOpen && (
+                            <div className="lg:hidden absolute top-16 left-0 w-full bg-white dark:bg-slate-900 border-b dark:border-slate-800 shadow-xl animate-in slide-in-from-top-2 p-4 flex flex-col gap-3 z-40">
+                                {isAdmin && view !== 'landing' && view !== 'login' && (
+                                    <div className="flex flex-col gap-2 pb-3 mb-1 border-b dark:border-slate-800">
+                                        <button onClick={() => { setView('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><ClipboardList size={18} /> Painel Principal</button>
+                                        <button onClick={() => { setView('checklists'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'checklists' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><ListTodo size={18} /> Checklists</button>
+                                        <button onClick={() => { setView('kanban'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'kanban' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><Kanban size={18} /> Atividades & KB</button>
+                                        <button onClick={() => { setView('inventory'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'inventory' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><Database size={18} /> Inventários</button>
+                                        <button onClick={() => { setView('reports'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'reports' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><BarChart3 size={18} /> Relatórios</button>
+                                    </div>
+                                )}
+
+                                {!isAdmin && view !== 'landing' && view !== 'new' && (
+                                    <button onClick={() => { setView('new'); setIsMobileMenuOpen(false); }} className="flex items-center justify-center gap-3 px-4 py-3.5 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-md mb-2"><PlusCircle size={18} /> Novo Chamado</button>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    {isAdmin && (
+                                        <button onClick={() => { setIsAnnouncementModalOpen(true); setIsMobileMenuOpen(false); }} className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-white bg-blue-600 shadow-md transition-all"><Megaphone size={18} /> Avisos Globais</button>
+                                    )}
+                                    <button onClick={() => setIsAudioEnabled(!isAudioEnabled)} className={`flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${isAudioEnabled ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400'}`}>{isAudioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />} Áudio</button>
+                                    <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 transition-colors">{isDarkMode ? <Sun size={18} /> : <Moon size={18} />} Tema</button>
+                                </div>
+
+                                {!isAdmin ? (
+                                    <button onClick={() => { setView('login'); setIsMobileMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest py-3.5 mt-2 rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 transition-colors"><Lock size={16} /> Acesso TI</button>
+                                ) : (
+                                    <button onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest py-3.5 mt-2 rounded-xl bg-red-50 text-red-600 dark:bg-red-900/20 transition-colors"><LogOut size={16} /> Sair do Sistema</button>
+                                )}
+                            </div>
+                        )}
                     </header>
 
                     {announcements.length > 0 && (
@@ -2083,7 +2282,135 @@
                         </div>
                         )}
                     </main>
-                    <footer className="py-8 border-t dark:border-slate-800 text-center text-slate-400 text-[10px] font-bold tracking-[0.2em] uppercase">Desenvolvido pela equipe de tecnologia da informação.</footer>
+
+                    {/* Global Chat Floating Component */}
+                    <div className="fixed right-6 z-[60] flex flex-col items-end gap-4 animate-in zoom-in-95 pointer-events-none" style={{ bottom: `${chatBottomPos}px` }}>
+                        {isGcOpen && (
+                            <div className="w-[340px] max-w-[calc(100vw-3rem)] h-[500px] max-h-[calc(100vh-8rem)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 pointer-events-auto">
+                                {/* HEADER */}
+                                <div className={`p-4 text-white flex items-center justify-between shadow-md shrink-0 transition-colors ${isAdmin && gcActiveRoom === 'internal_tech_room' ? 'bg-orange-600' : 'bg-blue-600'}`}>
+                                    <div className="flex items-center gap-2">
+                                        {isAdmin && gcActiveRoom && (<button onClick={() => setGcActiveRoom(null)} className={`p-1 rounded-lg transition-colors ${gcActiveRoom === 'internal_tech_room' ? 'hover:bg-orange-700' : 'hover:bg-blue-700'}`}><ChevronLeft size={18} /></button>)}
+                                        <div>
+                                            <h3 className="font-bold text-sm leading-tight flex items-center gap-2">
+                                                {isAdmin && gcActiveRoom === 'internal_tech_room' ? <Lock size={16} /> : <MessageCircle size={16} />} 
+                                                {isAdmin ? (gcActiveRoom ? (gcActiveRoom === 'internal_tech_room' ? 'Chat Interno TI' : globalChats.find(c => c.id === gcActiveRoom)?.name) : 'Chats da TI') : 'Chat Global'}
+                                            </h3>
+                                            {(!isAdmin && gcUser) && <p className="text-[9px] font-medium opacity-80">{gcUser.name} • {gcUser.unit}</p>}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button onClick={() => setIsGcOpen(false)} className={`p-1.5 rounded-lg transition-colors ${isAdmin && gcActiveRoom === 'internal_tech_room' ? 'hover:bg-orange-700' : 'hover:bg-blue-700'}`}><X size={16} /></button>
+                                    </div>
+                                </div>
+
+                                {/* BODY */}
+                                <div className="flex-1 overflow-hidden bg-slate-50 dark:bg-slate-950 flex flex-col relative">
+                                    {!isAdmin && !gcUser ? (
+                                        <form onSubmit={handleStartGc} className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+                                            <div className="text-center mb-6"><div className="w-12 h-12 bg-blue-100 text-blue-600 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-3"><User size={24}/></div><h4 className="font-bold text-sm dark:text-white">Identifique-se</h4><p className="text-[10px] text-slate-500 mt-1">Para falar com o suporte via chat.</p></div>
+                                            <div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Seu Nome</label><input required className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 dark:text-white transition-all" value={gcUserForm.name} onChange={e => setGcUserForm({...gcUserForm, name: e.target.value})} placeholder="Nome completo" /></div>
+                                            <div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Sua Unidade</label><div className="relative" ref={gcUnitMenuRef}><button type="button" onClick={() => setIsGcUnitMenuOpen(!isGcUnitMenuOpen)} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold flex items-center justify-between outline-none focus:ring-2 focus:ring-blue-500 dark:text-white transition-all"><span className={gcUserForm.unit ? '' : 'text-slate-400 font-normal'}>{gcUserForm.unit || 'Selecione...'}</span><ChevronDown size={14} className={`transition-transform ${isGcUnitMenuOpen ? 'rotate-180' : ''}`}/></button>{isGcUnitMenuOpen && <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg py-1 overflow-hidden animate-in fade-in zoom-in-95">{UNIT_QUICK_FILTERS.map(u => (<button key={u} type="button" onClick={() => {setGcUserForm({...gcUserForm, unit: u}); setIsGcUnitMenuOpen(false);}} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-white">{u}</button>))}</div>}</div></div>
+                                            <div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Seu Setor</label><input required className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 dark:text-white transition-all" value={gcUserForm.sector} onChange={e => setGcUserForm({...gcUserForm, sector: e.target.value})} placeholder="Ex: Financeiro" /></div>
+                                            <button type="submit" className="w-full py-3 mt-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-all active:scale-95">Iniciar Chat</button>
+                                        </form>
+                                    ) : isAdmin && !gcActiveRoom ? (
+                                        <div className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-2">
+                                            {/* Chat Interno da Equipe TI */}
+                                            {(() => {
+                                                const internalRoom = globalChats.find(c => c.id === 'internal_tech_room');
+                                                const lastMsg = internalRoom?.messages?.[internalRoom.messages.length - 1];
+                                                const isUnread = lastMsg && lastMsg.sender !== techName && lastMsg.timestamp > (gcReadTimes['internal_tech_room'] || "0");
+                                                return (
+                                                    <button onClick={() => { setGcActiveRoom('internal_tech_room'); markGcAsRead('internal_tech_room'); }} className="w-full text-left p-3 rounded-2xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800/50 hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-all flex items-center justify-between group shadow-sm">
+                                                        <div className="overflow-hidden flex-1 pr-2 flex items-center gap-3">
+                                                            <div className="p-2 bg-orange-500 text-white rounded-xl shrink-0 shadow-sm"><Lock size={16}/></div>
+                                                            <div className="overflow-hidden">
+                                                                <h4 className="text-xs font-bold text-orange-900 dark:text-orange-100 truncate">Chat Interno TI</h4>
+                                                                <p className={`text-[10px] truncate mt-0.5 ${isUnread ? 'text-orange-800 dark:text-orange-200 font-bold' : 'text-orange-600/80 dark:text-orange-300/60'}`}>{lastMsg ? `${lastMsg.sender}: ${lastMsg.text}` : 'Nenhuma mensagem'}</p>
+                                                            </div>
+                                                        </div>
+                                                        {isUnread ? <div className="w-2 h-2 bg-orange-500 rounded-full shadow-sm shrink-0 animate-pulse"></div> : <ChevronRight size={12} className="text-orange-300 dark:text-orange-700 shrink-0"/>}
+                                                    </button>
+                                                );
+                                            })()}
+
+                                            <div className="h-px bg-slate-200 dark:bg-slate-800 my-2"></div>
+                                            <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-2 mb-1">Chats Globais (Usuários)</h4>
+
+                                            {globalChats.filter(c => c.id !== 'internal_tech_room').length === 0 ? (
+                                                <div className="py-8 text-center text-slate-400 opacity-60"><MessageCircle size={24} className="mx-auto mb-2"/><p className="text-[10px] font-bold uppercase tracking-widest">Nenhuma Conversa</p></div>
+                                            ) : (
+                                                globalChats.filter(c => c.id !== 'internal_tech_room').sort((a, b) => (b.lastUpdated?.seconds || 0) - (a.lastUpdated?.seconds || 0)).map(room => {
+                                                    const lastMsg = room.messages?.[room.messages.length - 1];
+                                                    const isUnread = lastMsg && lastMsg.senderRole === 'user' && lastMsg.timestamp > (gcReadTimes[room.id] || "0");
+                                                    return (
+                                                        <button key={room.id} onClick={() => { setGcActiveRoom(room.id); markGcAsRead(room.id); }} className="w-full text-left p-3 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center justify-between group border border-transparent hover:border-slate-200 dark:hover:border-slate-700 bg-white dark:bg-slate-900 shadow-sm mb-1">
+                                                            <div className="overflow-hidden flex-1 pr-2 flex items-center gap-3">
+                                                                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl shrink-0"><Users size={16}/></div>
+                                                                <div className="overflow-hidden">
+                                                                    <h4 className="text-xs font-bold text-slate-800 dark:text-white truncate">{room.name}</h4>
+                                                                    <p className={`text-[10px] truncate mt-0.5 ${isUnread ? 'text-slate-800 dark:text-slate-200 font-bold' : 'text-slate-500'}`}>{lastMsg ? `${lastMsg.sender}: ${lastMsg.text}` : 'Nenhuma mensagem'}</p>
+                                                                </div>
+                                                            </div>
+                                                            {isUnread ? <div className="w-2 h-2 bg-blue-600 rounded-full shadow-sm shrink-0"></div> : <ChevronRight size={12} className="text-slate-300 dark:text-slate-600 shrink-0"/>}
+                                                        </button>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className={`flex-1 p-4 overflow-y-auto custom-scrollbar space-y-4 ${isAdmin && gcActiveRoom === 'internal_tech_room' ? 'bg-orange-50/30 dark:bg-orange-950/10' : ''}`}>
+                                                {(() => {
+                                                    const activeRoomId = isAdmin ? gcActiveRoom : `${normalizeSearch(gcUser.unit)}_${normalizeSearch(gcUser.sector)}`;
+                                                    const roomData = globalChats.find(c => c.id === activeRoomId);
+                                                    if (!roomData || !roomData.messages || roomData.messages.length === 0) return <p className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-10">Envie a primeira mensagem</p>;
+                                                    
+                                                    return roomData.messages.map((m, idx) => {
+                                                        const isInternalRoom = activeRoomId === 'internal_tech_room';
+                                                        const isMe = isAdmin ? (isInternalRoom ? m.sender === techName : m.senderRole === 'tech') : m.senderRole === 'user';
+                                                        
+                                                        let bubbleClass = isMe ? 'bg-blue-600 text-white rounded-tr-sm shadow-md' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-100 dark:border-slate-700 rounded-tl-sm shadow-sm';
+                                                        if (isInternalRoom) {
+                                                            bubbleClass = isMe ? 'bg-orange-500 text-white rounded-tr-sm shadow-md' : 'bg-white dark:bg-slate-800 text-orange-900 dark:text-orange-100 border border-orange-100 dark:border-orange-800 rounded-tl-sm shadow-sm';
+                                                        }
+
+                                                        return (
+                                                            <div key={m.id || idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
+                                                                <span className="text-[9px] font-bold text-slate-400 mb-1 px-2">{m.sender} • {formatTimestamp({toDate: () => new Date(m.timestamp)})}</span>
+                                                                <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs break-words whitespace-pre-wrap ${bubbleClass}`}>
+                                                                    {m.text}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    });
+                                                })()}
+                                                <div ref={gcEndRef} />
+                                            </div>
+                                            <div className={`p-3 bg-white dark:bg-slate-900 border-t shrink-0 ${isAdmin && gcActiveRoom === 'internal_tech_room' ? 'border-orange-100 dark:border-orange-900/50' : 'border-slate-100 dark:border-slate-800'}`}>
+                                                <form onSubmit={handleSendGcMessage} className="flex items-end gap-2">
+                                                    <textarea name="gcMsgInput" rows="1" placeholder="Mensagem..." className="flex-1 bg-slate-50 dark:bg-slate-800 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs outline-none focus:ring-2 focus:ring-blue-500 dark:text-white resize-none overflow-hidden transition-all" style={{ minHeight: '38px', maxHeight: '100px' }} onInput={(e) => { e.target.style.height = 'auto'; e.target.style.height = `${e.target.scrollHeight}px`; }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendGcMessage({preventDefault: () => {}, target: e.target.form}); } }} />
+                                                    <button type="submit" className={`p-2.5 text-white rounded-xl shadow-md transition-colors shrink-0 mb-0.5 active:scale-95 ${isAdmin && gcActiveRoom === 'internal_tech_room' ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-500/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'}`}><Send size={16} /></button>
+                                                </form>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        <button onClick={() => setIsGcOpen(!isGcOpen)} className={`p-4 rounded-full shadow-2xl transition-all hover:scale-105 active:scale-95 pointer-events-auto relative ${isGcOpen ? 'bg-slate-800 text-white dark:bg-slate-700' : 'bg-blue-600 text-white shadow-blue-500/30'}`}>
+                            {isGcOpen ? <X size={24} /> : <MessageCircle size={24} />}
+                            {!isGcOpen && (hasGcUnreadGlobal || hasGcUnreadInternal) && (
+                                <span className="absolute top-0 right-0 flex -space-x-1">
+                                    {hasGcUnreadGlobal && <span className="relative flex h-4 w-4"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-2 border-white dark:border-slate-900 z-10"></span></span>}
+                                    {hasGcUnreadInternal && <span className="relative flex h-4 w-4"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span><span className="relative inline-flex rounded-full h-4 w-4 bg-orange-500 border-2 border-white dark:border-slate-900 z-0"></span></span>}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+
+                    <footer ref={footerRef} className="py-8 border-t dark:border-slate-800 text-center text-slate-400 text-[10px] font-bold tracking-[0.2em] uppercase">Desenvolvido pela equipe de tecnologia da informação.</footer>
                 </div>
             );
         }
