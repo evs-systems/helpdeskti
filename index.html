@@ -2294,7 +2294,7 @@
                                         <div>
                                             <h3 className="font-bold text-sm leading-tight flex items-center gap-2">
                                                 {isAdmin && gcActiveRoom === 'internal_tech_room' ? <Lock size={16} /> : <MessageCircle size={16} />} 
-                                                {isAdmin ? (gcActiveRoom ? (gcActiveRoom === 'internal_tech_room' ? 'Chat Interno TI' : globalChats.find(c => c.id === gcActiveRoom)?.name) : 'Chats da TI') : 'Chat Global'}
+                                                {isAdmin ? (gcActiveRoom ? (gcActiveRoom === 'internal_tech_room' ? 'Chat Interno TI' : globalChats.find(c => c.id === gcActiveRoom)?.name) : 'Chat Global') : 'Chat Global'}
                                             </h3>
                                             {(!isAdmin && gcUser) && <p className="text-[9px] font-medium opacity-80">{gcUser.name} • {gcUser.unit}</p>}
                                         </div>
