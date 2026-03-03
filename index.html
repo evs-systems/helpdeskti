@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#2563eb">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -92,7 +92,7 @@
     }
     </script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <style>body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }</style>
+    <style>html, body, #root { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }</style>
 </head>
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
     <div id="root"></div>
@@ -1421,7 +1421,7 @@
             };
 
             return (
-                <div ref={scrollAreaRef} onScroll={handleScroll} className={`h-screen overflow-y-auto overflow-x-hidden flex flex-col font-sans transition-colors duration-300 ${isDarkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`} style={{ colorScheme: isDarkMode ? 'dark' : 'light', '--scrollbar-track': isDarkMode ? '#020617' : '#f8fafc', '--scrollbar-thumb': isDarkMode ? '#334155' : '#cbd5e1', '--scrollbar-hover': isDarkMode ? '#475569' : '#94a3b8' }}>
+                <div ref={scrollAreaRef} onScroll={handleScroll} className={`absolute inset-0 overflow-y-auto overflow-x-hidden flex flex-col font-sans transition-colors duration-300 ${isDarkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`} style={{ colorScheme: isDarkMode ? 'dark' : 'light', '--scrollbar-track': isDarkMode ? '#020617' : '#f8fafc', '--scrollbar-thumb': isDarkMode ? '#334155' : '#cbd5e1', '--scrollbar-hover': isDarkMode ? '#475569' : '#94a3b8' }}>
                     <style>{customScrollStyles}</style>
                     {firebaseError && (<div className="fixed inset-0 z-[100] bg-slate-900/95 flex items-center justify-center p-4"><div className="bg-white dark:bg-slate-800 p-8 rounded-3xl max-w-lg w-full border border-red-500 shadow-2xl relative overflow-hidden"><div className="absolute top-0 left-0 w-full h-2 bg-red-500"></div><div className="flex items-center gap-3 mb-4 text-red-600 dark:text-red-400"><AlertOctagon size={48} /><h2 className="text-2xl font-black leading-tight">Configuração Necessária</h2></div><p className="text-slate-600 dark:text-slate-300 mb-6 font-medium text-lg">{firebaseError.title}</p><div className="bg-slate-100 dark:bg-slate-950 rounded-xl p-4 mb-6 border border-slate-200 dark:border-slate-800"><p className="text-sm text-slate-500 mb-2 font-bold uppercase tracking-widest flex items-center gap-2"><Terminal size={14}/> Console do Firebase</p><p className="text-sm font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{firebaseError.message}</p></div><button onClick={() => setFirebaseError(null)} className="w-full py-4 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-white rounded-xl font-bold hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Entendi, vou configurar</button></div></div>)}
                     <ImageViewer isOpen={imageView.isOpen} onClose={closeImageViewer} images={imageView.images} currentIndex={imageView.currentIndex} onNext={handleNextImage} onPrev={handlePrevImage} />
