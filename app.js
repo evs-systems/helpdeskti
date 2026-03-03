@@ -28,8 +28,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-const SOUND_NEW_TICKET = "[https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3](https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3)"; 
-const SOUND_UPDATE = "[https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3](https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3)"; 
+const SOUND_NEW_TICKET = "https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"; 
+const SOUND_UPDATE = "https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3"; 
 const EMAIL_DOMAIN = "@helpdeskti.com";
 
 const STATUS_OPTIONS = [
@@ -1578,4 +1578,157 @@ function App() {
                                                                     </tr>
                                                                 );
                                                             })}
-                                                        </React.Fragment
+                                                        </React.Fragment>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {view === 'reports' && isAdmin && reportData && (
+                <div className="space-y-8 animate-in fade-in zoom-in-95 duration-500">
+                    <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border dark:border-slate-800">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
+                        <h2 className="text-xl font-black flex items-center gap-2 dark:text-white"><BarChart3 className="text-blue-600" /> Relatório de Desempenho</h2>
+                        <div className="flex flex-wrap gap-2">
+                        <button onClick={() => setPresetDate('today')} className="px-4 py-2 rounded-2xl text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors">Hoje</button>
+                        <button onClick={() => setPresetDate('month')} className="px-4 py-2 rounded-2xl text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors">Este Mês</button>
+                        <button onClick={() => setPresetDate('year')} className="px-4 py-2 rounded-2xl text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors">Este Ano</button>
+                        </div>
+                    </div>
+                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                        <div className="space-y-1 w-full md:w-1/3">
+                        <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest ml-1">Mês de Referência</label>
+                        <div className="relative" ref={monthMenuRef}>
+                            <button onClick={() => setIsMonthMenuOpen(!isMonthMenuOpen)} className="w-full pl-4 pr-10 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all flex items-center justify-between"><span className="truncate">{selectedMonth === 'all' ? 'Todo o ano' : MONTHS[selectedMonth]}</span><ChevronDown size={18} className={`flex-shrink-0 transition-transform ${isMonthMenuOpen ? 'rotate-180' : ''}`} /></button>
+                            {isMonthMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl max-h-60 overflow-y-auto py-1 animate-in fade-in zoom-in-95 duration-200 custom-scrollbar"><button onClick={() => { setSelectedMonth('all'); setReportFilterMode('custom'); setIsMonthMenuOpen(false); }} className="w-full px-4 py-2 text-left text-sm font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todo o ano {selectedMonth === 'all' && <Check size={14} className="text-blue-600" />}</button>{MONTHS.map((m, i) => (<button key={i} onClick={() => { setSelectedMonth(i); setReportFilterMode('custom'); setIsMonthMenuOpen(false); }} className="w-full px-4 py-2 text-left text-sm font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{m} {selectedMonth === i && <Check size={14} className="text-blue-600" />}</button>))}</div>)}
+                        </div>
+                        </div>
+                        <div className="space-y-1 w-full md:w-1/3">
+                        <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest ml-1">Ano</label>
+                        <div className="relative" ref={yearMenuRef}>
+                            <button onClick={() => setIsYearMenuOpen(!isYearMenuOpen)} className="w-full pl-4 pr-10 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all flex items-center justify-between"><span>{selectedYear}</span><ChevronDown size={18} className={`flex-shrink-0 transition-transform ${isYearMenuOpen ? 'rotate-180' : ''}`} /></button>
+                            {isYearMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl max-h-60 overflow-y-auto py-1 animate-in fade-in zoom-in-95 duration-200 custom-scrollbar">{availableYears.map(y => (<button key={y} onClick={() => { setSelectedYear(y); setReportFilterMode('custom'); setIsYearMenuOpen(false); }} className="w-full px-4 py-2 text-left text-sm font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{y} {selectedYear === y && <Check size={14} className="text-blue-600" />}</button>))}</div>)}
+                        </div>
+                        </div>
+                        <div className="space-y-1 w-full md:w-1/3">
+                        <label className="text-[10px] font-bold uppercase text-slate-400 tracking-widest ml-1">Visualização</label>
+                        <div className="relative w-full pl-12 pr-5 py-3 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center text-sm font-bold dark:text-white border border-transparent transition-all"><Calendar size={18} className="absolute left-4 text-slate-400" /><div className="flex flex-col leading-none"><span className="text-[10px] text-slate-400 uppercase tracking-wide">De</span><span>{formatDateBr(dateFilter.start)}</span></div><div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-3"></div><div className="flex flex-col leading-none"><span className="text-[10px] text-slate-400 uppercase tracking-wide">Até</span><span>{formatDateBr(dateFilter.end)}</span></div><input type="date" value={dateFilter.start} onChange={() => {}} className="absolute inset-0 w-full h-full opacity-0 cursor-default" disabled /></div>
+                        </div>
+                    </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    <div className="bg-blue-500 text-white p-6 rounded-3xl shadow-lg shadow-blue-500/20"><p className="text-blue-100 text-xs font-bold uppercase tracking-widest mb-1">Abertos</p><p className="text-4xl font-black">{reportData.total}</p></div>
+                    <div className="bg-purple-500 text-white p-6 rounded-3xl shadow-lg shadow-purple-500/20"><p className="text-purple-100 text-xs font-bold uppercase tracking-widest mb-1">Solicitações</p><p className="text-4xl font-black">{reportData.requests}</p></div>
+                    <div className="bg-green-500 text-white p-6 rounded-3xl shadow-lg shadow-green-500/20"><p className="text-green-100 text-xs font-bold uppercase tracking-widest mb-1">Finalizados</p><p className="text-4xl font-black">{reportData.finalized}</p></div>
+                    <div className="bg-red-500 text-white p-6 rounded-3xl shadow-lg shadow-red-500/20"><p className="text-red-100 text-xs font-bold uppercase tracking-widest mb-1">Contestados</p><p className="text-4xl font-black">{reportData.contested}</p></div>
+                    <div className="bg-slate-800 text-white p-6 rounded-3xl shadow-lg shadow-slate-500/20"><p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Eficiência</p><p className="text-4xl font-black">{reportData.total > 0 ? Math.round((reportData.finalized / reportData.total) * 100) : 0}%</p></div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-3xl border dark:border-slate-800 shadow-sm">
+                            <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><BarChart3 size={16}/> Evolução de Chamados</h3>
+                            <div className="relative w-full h-64">
+                                <canvas ref={lineChartRef}></canvas>
+                            </div>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border dark:border-slate-800 shadow-sm">
+                            <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><Layers size={16}/> Composição</h3>
+                            <div className="relative w-full h-64">
+                                <canvas ref={pieChartRef}></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border dark:border-slate-800"><h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><Building2 size={16}/> Unidade com mais chamados</h3>{reportData.topUnit ? (<div><p className="text-2xl font-black text-slate-800 dark:text-white">{reportData.topUnit[0]}</p><p className="text-sm font-bold text-slate-500">{reportData.topUnit[1]} chamados</p></div>) : <p className="text-slate-400 font-bold">Sem dados</p>}</div>
+                    <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border dark:border-slate-800"><h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2"><Settings size={16}/> Setor com mais chamados</h3>{reportData.topSector ? (<div><p className="text-2xl font-black text-slate-800 dark:text-white">{reportData.topSector[0]}</p><p className="text-sm font-bold text-slate-500">{reportData.topSector[1]} chamados</p></div>) : <p className="text-slate-400 font-bold">Sem dados</p>}</div>
+                    </div>
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 overflow-hidden">
+                    <div className="p-6 border-b dark:border-slate-800"><h3 className="font-bold text-lg dark:text-white">Produtividade da Equipe</h3></div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase text-[10px] tracking-widest font-black"><tr><th className="px-6 py-4">Técnico</th><th className="px-6 py-4">Ativos</th><th className="px-6 py-4">Finalizados</th><th className="px-6 py-4">Total</th></tr></thead>
+                        <tbody className="divide-y dark:divide-slate-800">{Object.entries(reportData.techs).map(([name, stats]) => (<tr key={name} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"><td className="px-6 py-4 font-bold dark:text-white">{name}</td><td className="px-6 py-4 font-bold text-blue-600">{stats.active}</td><td className="px-6 py-4 font-bold text-green-600">{stats.finalized}</td><td className="px-6 py-4 font-bold dark:text-slate-300">{stats.total}</td></tr>))}{Object.keys(reportData.techs).length === 0 && (<tr><td colSpan="4" className="px-6 py-8 text-center text-slate-400 font-bold">Nenhum registro encontrado.</td></tr>)}</tbody>
+                        </table>
+                    </div>
+                    </div>
+                </div>
+                )}
+                
+                {view === 'login' && (
+                <div className="max-w-md mx-auto bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-3xl p-8 shadow-2xl animate-in zoom-in-95 duration-300">
+                    <div className="text-center mb-8"><div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center mx-auto mb-4 text-blue-600"><Lock size={32} /></div><h2 className="text-2xl font-bold dark:text-white">Painel TI</h2><p className="text-sm text-slate-500">Acesso restrito para técnicos</p></div>
+                    <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="text" placeholder="Nome de usuário" className="w-full pl-12 pr-5 py-3 border rounded-2xl bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-blue-500/10 font-bold transition-all" value={loginForm.email} onChange={(e) => setLoginForm({...loginForm, email: e.target.value})} disabled={isLoggingIn} /></div>
+                    <div className="relative"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="password" placeholder="Senha" className="w-full pl-12 pr-5 py-3 border rounded-2xl bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-blue-500/10 font-bold transition-all" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} disabled={isLoggingIn} /></div>
+                    {loginError && <p className="text-red-500 text-xs text-center font-bold">Falha na autenticação.</p>}
+                    <button disabled={isLoggingIn} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-[0_0_15px_rgba(37,99,235,0.4)] hover:shadow-[0_0_20px_rgba(37,99,235,0.6)] active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed">{isLoggingIn ? <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div> : 'Entrar'}</button>
+                    <button type="button" onClick={() => setView('landing')} className="w-full text-slate-400 text-sm font-bold py-2" disabled={isLoggingIn}>Voltar</button>
+                    </form>
+                </div>
+                )}
+
+                {view === 'landing' && (
+                    <div className="max-w-4xl mx-auto py-12 animate-in fade-in zoom-in-95 duration-500">
+                    <div className="text-center mb-12"><h2 className="text-3xl md:text-4xl font-black mb-4 dark:text-white">Olá! Como podemos <span className="text-blue-600">ajudar hoje?</span></h2><p className="text-slate-500 dark:text-slate-400 font-medium">Selecione uma das opções abaixo para prosseguir com seu atendimento.</p></div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <button onClick={() => setView('new')} className="group relative bg-white dark:bg-slate-900 border dark:border-slate-800 p-8 rounded-[2rem] shadow-sm hover:shadow-2xl hover:shadow-blue-500/10 transition-all hover:-translate-y-2 text-left overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity"><PlusCircle size={120} className="text-blue-600" /></div><div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform"><PlusCircle size={32} /></div><h3 className="text-2xl font-bold dark:text-white mb-2">Abrir Novo Chamado</h3><p className="text-slate-500 dark:text-slate-400 text-sm mb-6 font-medium">Está com algum problema técnico? Clique aqui para registrar uma nova solicitação.</p><div className="flex items-center gap-2 text-blue-600 font-bold text-sm uppercase tracking-widest">Começar agora <ChevronRight size={16} /></div></button>
+                    <button onClick={() => setView('dashboard')} className="group relative bg-white dark:bg-slate-900 border dark:border-slate-800 p-8 rounded-[2rem] shadow-sm hover:shadow-2xl hover:shadow-blue-500/10 transition-all hover:-translate-y-2 text-left overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity"><Search size={120} className="text-slate-600" /></div><div className="w-16 h-16 bg-slate-800 dark:bg-slate-700 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform"><ClipboardList size={32} /></div><h3 className="text-2xl font-bold dark:text-white mb-2">Meus Chamados</h3><p className="text-slate-500 dark:text-slate-400 text-sm mb-6 font-medium">Acompanhe o status e converse com o suporte sobre seus chamados já abertos.</p><div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-bold text-sm uppercase tracking-widest">Ver histórico <ChevronRight size={16} /></div></button>
+                    </div>
+                </div>
+                )}
+
+                {view === 'new' && (
+                    <div className="max-w-2xl mx-auto bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-3xl p-8 shadow-sm animate-in slide-in-from-bottom-10 duration-500">
+                    <h2 className="text-2xl font-bold mb-8 flex items-center gap-3 text-blue-600"><PlusCircle /> Abertura de Chamado</h2>
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl mb-8"><button type="button" onClick={() => setTicketType('problem')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${ticketType === 'problem' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}><Wrench size={18} /> Problema Técnico</button><button type="button" onClick={() => setTicketType('request')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${ticketType === 'request' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}><PackagePlus size={18} /> Solicitação</button></div>
+                    <form onSubmit={handleCreateTicket} className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-1.5"><Building2 size={12} /> Unidade</label><div className="relative"><MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required className="w-full pl-12 pr-4 py-3 border rounded-2xl dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.unit} onChange={(e) => setFormData({...formData, unit: e.target.value})} placeholder="Ex: Everest" /></div></div><div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-1.5"><Settings size={12} /> Setor</label><div className="relative"><Settings className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required className="w-full pl-12 pr-4 py-3 border rounded-2xl dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.department} onChange={(e) => setFormData({...formData, department: e.target.value})} placeholder="Ex: Comercial" /></div></div></div>
+                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-1.5"><User size={12} /> Solicitante</label><div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required className="w-full pl-12 pr-4 py-3 border rounded-2xl dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.requester} onChange={(e) => setFormData({...formData, requester: e.target.value})} placeholder="Seu nome" /></div></div>
+                    {ticketType === 'problem' && (<><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-1.5"><Laptop size={12} /> Equipamento / Operador</label><div className="relative"><Laptop className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input className="w-full pl-12 pr-4 py-3 border rounded-2xl dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.machineName} onChange={(e) => setFormData({...formData, machineName: e.target.value})} placeholder="Ex: PC-CONTABIL-01" /></div></div><div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-1.5"><Hash size={12} /> AnyDesk</label><div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input className="w-full pl-12 pr-4 py-3 border rounded-2xl dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 font-mono transition-all" value={formData.anydeskId} onChange={(e) => setFormData({...formData, anydeskId: e.target.value.replace(/\D/g, '')})} placeholder="ID de acesso" /></div></div></div><div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-1.5"><Clock size={12} /> Horário para Atendimento</label><div className="relative" ref={timeMenuRef}><button type="button" onClick={() => setIsTimeMenuOpen(!isTimeMenuOpen)} className="w-full px-5 py-3 border rounded-2xl bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white flex items-center justify-between font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"><div className="flex items-center gap-3"><Clock size={18} className="text-slate-400" /><span>{formData.accessTime}</span></div><ChevronDown size={18} className={`transition-transform text-slate-400 ${isTimeMenuOpen ? 'rotate-180' : ''}`} /></button>{isTimeMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"><div className="max-h-60 overflow-y-auto py-2 custom-scrollbar">{TIME_OPTIONS.map((time) => (<button key={time} type="button" onClick={() => { setFormData({...formData, accessTime: time}); setIsTimeMenuOpen(false); }} className="w-full px-6 py-2.5 text-left text-sm font-semibold hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex items-center justify-between"><span className={formData.accessTime === time ? 'text-blue-600' : 'text-slate-600 dark:text-slate-300'}>{time}</span>{formData.accessTime === time && <Check size={14} className="text-blue-600" />}</button>))}</div></div>)}</div></div></>)}
+                    <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-1.5"><StickyNote size={12} /> {ticketType === 'request' ? 'O que você precisa?' : 'Descrição do Problema'}</label><div className="relative"><AlignLeft className="absolute left-4 top-4 text-slate-400" size={18} /><textarea required rows="4" className="w-full pl-12 pr-4 py-3 border rounded-2xl bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 resize-none transition-all" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} placeholder={ticketType === 'request' ? "Descreva o item ou acesso que você precisa..." : "O que está acontecendo?"} /></div></div>
+                    <div className="flex gap-4 pt-2"><button disabled={isSubmitting} className="flex-1 flex justify-center items-center gap-2 bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 transition-all uppercase text-xs tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50">{isSubmitting ? <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div> : 'Enviar Chamado'}</button><button type="button" onClick={() => setView('landing')} className="px-8 border rounded-2xl font-bold dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all uppercase text-xs">Voltar</button></div>
+                    </form>
+                </div>
+                )}
+
+                {(view === 'dashboard' || view === 'archive') && (
+                <div className="space-y-6 animate-in fade-in duration-500">
+                    {!isAdmin && (!userSector || !userUnit) ? (
+                    <div className="max-w-md mx-auto bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-3xl p-8 shadow-sm">
+                        <div className="text-center mb-6"><div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-600 shadow-sm"><Users size={24} /></div><h3 className="text-xl font-bold dark:text-white">Identificação Necessária</h3><p className="text-xs text-slate-500 mt-1">Informe seus dados para localizar seus chamados.</p></div>
+                        <div className="space-y-4">
+                        <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-1.5"><Building2 size={12} /> Unidade</label><div className="relative"><MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input className="w-full pl-12 pr-4 py-3 border rounded-2xl dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={unitInput} onChange={(e) => setUnitInput(e.target.value)} placeholder="Ex: Everest" /></div></div>
+                        <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 flex items-center gap-1.5"><Monitor size={12} /> Setor</label><div className="relative"><Settings className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input className="w-full pl-12 pr-4 py-3 border rounded-2xl bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={sectorInput} onChange={(e) => setSectorInput(e.target.value)} placeholder="Ex: Comercial" /></div></div>
+                        <button onClick={handleAccessConfirm} disabled={isAccessing} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-3.5 rounded-2xl hover:bg-blue-700 transition-all uppercase text-[10px] tracking-widest shadow-lg shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed">{isAccessing ? <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div> : 'Acessar Painel'}</button>
+                        <button onClick={() => setView('landing')} className="w-full text-slate-400 text-xs font-bold py-2">Voltar ao Início</button>
+                        </div>
+                    </div>
+                    ) : (
+                        <>
+                        {isAdmin && view === 'dashboard' && (
+                        <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-3xl p-8 shadow-lg shadow-blue-900/20 relative overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500">
+                            <div className="relative z-10 text-white"><h2 className="text-3xl font-black mb-2">Olá, {techName}!</h2><p className="text-blue-100 font-medium text-lg italic opacity-90">"{dailyPhrase}"</p></div>
+                            <div className="absolute right-0 bottom-0 p-6 opacity-10 text-white transform rotate-12 translate-y-4 translate-x-4"><ClipboardList size={140} /></div>
+                        </div>
+                        )}
+                        
+                        <div className="flex flex-wrap items-center gap-3">
+                        {isAdmin ? (
+                            <>
+                            <div className="bg-slate-900 dark:bg-blue-600 text-white px-4 py-2 rounded-2xl flex items-center gap-3 shadow-sm border border-transparent w-fit animate-in slide-in-from-left-4"><UserCheck size={18} className="text-blue-400 dark:text-blue-100" /><div className="leading-tight"><p className="text-[9px] font-black uppercase opacity-60 tracking-widest">Painel TI Ativo</p><p className="font-bold text-xs">{techName}</p></div></div>
+                            <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-2xl shadow-inner overflow-x-auto custom-scrollbar">
+                                <button onClick={() => { setView('dashboard'); setTechViewMode('active'); }} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${view === 'dashboard' && techViewMode === 'active' ? 'bg-white dark:bg-slate-700 shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>Meus/Novos {activeCount > 0 && <span className="bg-blue-600 text-white text-[9px] px-1.5 py-0.5 rounded-full ml-1">{activeCount}</span>}</button>
+                                <button onClick={() => { setView('dashboard'); setTechViewMode('others'); }} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${view === 'dashboard' && techViewMode === 'others' ? 'bg-white dark:bg-slate-700 shadow text-purple-600' : 'text-slate-500 hover:text-slate-700'}`}>Em Atendimento {othersCount > 0 && <span className="bg-purple-500 text-white text-[9px] px-1.5 py-0.5 rounded-full ml-1">{othersCount}</span>}</button>
+                                <button onClick={() => { setView('dashboard'); setTechViewMode('contested'); }} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${view === 'dashboard' && techViewMode === 'contested' ? 'bg-white dark:bg-slate-700 shadow text-red-600' : 'text-slate-500 hover:text-slate-700'}`}>Contestações {contestedCount > 0 && <span className="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full">{contestedCount}</span>}</button>
+                            </div>
+                            <button onClick={() => setView(view === 'archive' ? 'dashboard' : 'archive')} className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all border shadow-sm whitespace-nowrap ${view === 'archive' ? 'bg-blue-600 text-white border-transparent' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}><Archive size={16} /><span className="hidden sm:inline">Chamados Finalizados</span><span className="sm:hidden">Finalizados</span></button>
+                            </>
+                        ) : (
+                            <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-4 rounded-2xl flex items-center justify
