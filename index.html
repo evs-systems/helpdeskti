@@ -2294,7 +2294,7 @@
                                         <div>
                                             <h3 className="font-bold text-sm leading-tight flex items-center gap-2">
                                                 {isAdmin && gcActiveRoom === 'internal_tech_room' ? <Lock size={16} /> : <MessageCircle size={16} />} 
-                                                {isAdmin ? (gcActiveRoom ? (gcActiveRoom === 'internal_tech_room' ? 'Chat Interno TI' : globalChats.find(c => c.id === gcActiveRoom)?.name) : 'Chat Global') : 'Chat Global'}
+                                                {isAdmin ? (gcActiveRoom ? (gcActiveRoom === 'internal_tech_room' ? 'Chat Interno TI' : globalChats.find(c => c.id === gcActiveRoom)?.name) : 'Chat Global') : 'Assistência Rápida'}
                                             </h3>
                                             {(!isAdmin && gcUser) && <p className="text-[9px] font-medium opacity-80">{gcUser.name} • {gcUser.unit}</p>}
                                         </div>
@@ -2399,8 +2399,15 @@
                                 </div>
                             </div>
                         )}
-                        <button onClick={() => setIsGcOpen(!isGcOpen)} className={`p-4 rounded-full shadow-2xl transition-all hover:scale-105 active:scale-95 pointer-events-auto relative ${isGcOpen ? 'bg-slate-800 text-white dark:bg-slate-700' : 'bg-blue-600 text-white shadow-blue-500/30'}`}>
-                            {isGcOpen ? <X size={24} /> : <MessageCircle size={24} />}
+                        <button onClick={() => setIsGcOpen(!isGcOpen)} className={`group flex items-center justify-center p-4 rounded-full shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 pointer-events-auto relative ${isGcOpen ? 'bg-slate-800 text-white dark:bg-slate-700' : 'bg-blue-600 text-white shadow-blue-500/30'}`}>
+                            {isGcOpen ? <X size={24} className="shrink-0" /> : <MessageCircle size={24} className="shrink-0" />}
+                            
+                            {!isAdmin && !isGcOpen && (
+                                <span className="max-w-0 ml-0 overflow-hidden whitespace-nowrap opacity-0 group-hover:max-w-[200px] group-hover:opacity-100 group-hover:ml-3 transition-all duration-300 font-bold text-sm">
+                                    Assistência Rápida
+                                </span>
+                            )}
+
                             {!isGcOpen && (hasGcUnreadGlobal || hasGcUnreadInternal) && (
                                 <span className="absolute top-0 right-0 flex -space-x-1">
                                     {hasGcUnreadGlobal && <span className="relative flex h-4 w-4"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-2 border-white dark:border-slate-900 z-10"></span></span>}
