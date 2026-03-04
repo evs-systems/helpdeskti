@@ -370,30 +370,34 @@
             const [chatBottomPos, setChatBottomPos] = useState(24);
 
             const handleScroll = () => {
-                if (!scrollAreaRef.current || !footerRef.current) return;
-                const scrollArea = scrollAreaRef.current;
-                const footer = footerRef.current;
+                if (!footerRef.current) return;
                 
-                // Calcula a distância exata até o fim da página
-                const distanceToBottom = Math.max(0, scrollArea.scrollHeight - scrollArea.scrollTop - scrollArea.clientHeight);
-                const footerHeight = footer.offsetHeight;
+                // Captura a posição exata do rodapé em relação à janela visível do navegador
+                const footerRect = footerRef.current.getBoundingClientRect();
+                const viewportHeight = window.innerHeight;
                 
-                // Se a distância for menor que o tamanho do rodapé (significa que o rodapé apareceu na tela), sobe o chat
-                if (distanceToBottom < footerHeight) {
-                    setChatBottomPos(24 + (footerHeight - distanceToBottom));
+                // Calcula quantos pixels do rodapé já estão aparecendo na tela
+                const footerVisibleHeight = viewportHeight - footerRect.top;
+                
+                if (footerVisibleHeight > 0) {
+                    // Se o topo do rodapé entrou na tela, sobe o chat para não sobrepor
+                    setChatBottomPos(24 + footerVisibleHeight);
                 } else {
-                    setChatBottomPos(24); // 24px é o padrão (equivalente ao bottom-6 do tailwind)
+                    // Se o rodapé está totalmente fora da visão, mantém na posição original
+                    setChatBottomPos(24);
                 }
             };
 
             useEffect(() => {
-                // Força o cálculo imediato e também logo após o DOM se estabilizar
+                // Executa imediatamente e garante re-cálculos ao longo de 1 segundo (tempo de renderização de imagens/dados)
                 handleScroll();
-                setTimeout(handleScroll, 300);
+                const t1 = setTimeout(handleScroll, 50);
+                const t2 = setTimeout(handleScroll, 300);
+                const t3 = setTimeout(handleScroll, 800);
                 
                 window.addEventListener('resize', handleScroll);
                 
-                // Observador inteligente: Recalcula a posição automaticamente sempre que o conteúdo da página aumentar/mudar (ex: após carregar chamados)
+                // Observador inteligente do DOM
                 let observer;
                 if (scrollAreaRef.current) {
                     observer = new MutationObserver(() => handleScroll());
@@ -403,8 +407,11 @@
                 return () => {
                     window.removeEventListener('resize', handleScroll);
                     if (observer) observer.disconnect();
+                    clearTimeout(t1);
+                    clearTimeout(t2);
+                    clearTimeout(t3);
                 };
-            }, []);
+            }, [view, isGcOpen, tickets.length]); // Agora ele recalcula se a lista de chamados mudar/carregar
 
             // Global Chat States
             const [isGcOpen, setIsGcOpen] = useState(false);
