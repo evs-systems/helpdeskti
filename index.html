@@ -430,6 +430,11 @@
             const [isGcUnitMenuOpen, setIsGcUnitMenuOpen] = useState(false);
             const gcUnitMenuRef = useRef(null);
             const gcEndRef = useRef(null);
+            const [gcMessageLimit, setGcMessageLimit] = useState(50);
+            const [ticketMessageLimit, setTicketMessageLimit] = useState(50);
+
+            useEffect(() => { setGcMessageLimit(50); }, [gcActiveRoom, isGcOpen]);
+            useEffect(() => { setTicketMessageLimit(50); }, [expandedChatId, activeChatTab]);
 
             // Refs for Charts
             const lineChartRef = useRef(null);
@@ -2329,7 +2334,14 @@
                                                     {isAdmin && (<div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl"><button onClick={() => { setActiveChatTab('public'); markAsRead(ticket.id, 'public'); }} className={`relative px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${activeChatTab === 'public' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>Público{hasPublicUnread && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></div>}</button><button onClick={() => { setActiveChatTab('internal'); markAsRead(ticket.id, 'internal'); }} className={`relative px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 ${activeChatTab === 'internal' ? 'bg-white dark:bg-slate-700 text-orange-600 dark:text-orange-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}><EyeOff size={12} /> Interno{hasInternalUnread && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></div>}</button></div>)}
                                                     </div>
                                                     <div className={`rounded-3xl p-4 mb-4 max-h-[400px] overflow-y-auto space-y-4 shadow-inner scroll-smooth custom-scrollbar ${activeChatTab === 'internal' ? 'bg-orange-50/50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-900/30 border' : 'bg-slate-100/50 dark:bg-slate-950/30'}`}>
-                                                    {((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages)?.length > 0 ? (((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages).map((m, idx) => {
+                                                    {((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages)?.length > 0 ? (
+                                                        <>
+                                                        {((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages).length > ticketMessageLimit && (
+                                                            <div className="flex justify-center pb-2">
+                                                                <button onClick={() => setTicketMessageLimit(prev => prev + 50)} className="px-4 py-1.5 bg-slate-200/50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors shadow-sm">Carregar anteriores</button>
+                                                            </div>
+                                                        )}
+                                                        {((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages).slice(Math.max(0, ((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages).length - ticketMessageLimit)).map((m, idx) => {
                                                         const isInternal = activeChatTab === 'internal';
                                                         const isMyMessage = m.sender === techName;
                                                         
@@ -2358,7 +2370,7 @@
                                                                 </div>
                                                             </div>
                                                         );
-                                                    })) : (<div className="py-12 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest italic opacity-60">Nenhuma mensagem registrada</div>)}
+                                                    })}</>) : (<div className="py-12 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest italic opacity-60">Nenhuma mensagem registrada</div>)}
                                                     <div ref={chatEndRef} />
                                                     </div>
                                                     <div className="relative">
@@ -2449,7 +2461,11 @@
                                             {globalChats.filter(c => c.id !== 'internal_tech_room').length === 0 ? (
                                                 <div className="py-8 text-center text-slate-400 opacity-60"><MessageCircle size={24} className="mx-auto mb-2"/><p className="text-[10px] font-bold uppercase tracking-widest">Nenhuma Conversa</p></div>
                                             ) : (
-                                                globalChats.filter(c => c.id !== 'internal_tech_room').sort((a, b) => (b.lastUpdated?.seconds || 0) - (a.lastUpdated?.seconds || 0)).map(room => {
+                                                globalChats.filter(c => c.id !== 'internal_tech_room').sort((a, b) => {
+                                                    const timeA = a.messages?.length > 0 ? new Date(a.messages[a.messages.length - 1].timestamp).getTime() : (a.lastUpdated?.seconds ? a.lastUpdated.seconds * 1000 : 0);
+                                                    const timeB = b.messages?.length > 0 ? new Date(b.messages[b.messages.length - 1].timestamp).getTime() : (b.lastUpdated?.seconds ? b.lastUpdated.seconds * 1000 : 0);
+                                                    return timeB - timeA;
+                                                }).map(room => {
                                                     const lastMsg = room.messages?.[room.messages.length - 1];
                                                     const isUnread = lastMsg && lastMsg.senderRole === 'user' && lastMsg.timestamp > (gcReadTimes[room.id] || "0");
                                                     return (
@@ -2475,7 +2491,17 @@
                                                     const roomData = globalChats.find(c => c.id === activeRoomId);
                                                     if (!roomData || !roomData.messages || roomData.messages.length === 0) return <p className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-10">Envie a primeira mensagem</p>;
                                                     
-                                                    return roomData.messages.map((m, idx) => {
+                                                    const totalMsgs = roomData.messages.length;
+                                                    const messagesToShow = roomData.messages.slice(Math.max(0, totalMsgs - gcMessageLimit));
+
+                                                    return (
+                                                        <>
+                                                        {totalMsgs > gcMessageLimit && (
+                                                            <div className="flex justify-center pb-2">
+                                                                <button onClick={() => setGcMessageLimit(prev => prev + 50)} className="px-4 py-1.5 bg-slate-200/50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors shadow-sm">Carregar anteriores</button>
+                                                            </div>
+                                                        )}
+                                                        {messagesToShow.map((m, idx) => {
                                                         const isInternalRoom = activeRoomId === 'internal_tech_room';
                                                         const isMe = isAdmin ? (isInternalRoom ? m.sender === techName : m.senderRole === 'tech') : m.senderRole === 'user';
                                                         
@@ -2492,7 +2518,7 @@
                                                                 </div>
                                                             </div>
                                                         );
-                                                    });
+                                                    })}</>);
                                                 })()}
                                                 <div ref={gcEndRef} />
                                             </div>
