@@ -387,10 +387,24 @@
             };
 
             useEffect(() => {
+                // Força o cálculo imediato e também logo após o DOM se estabilizar
                 handleScroll();
+                setTimeout(handleScroll, 300);
+                
                 window.addEventListener('resize', handleScroll);
-                return () => window.removeEventListener('resize', handleScroll);
-            }, [view, isGcOpen]);
+                
+                // Observador inteligente: Recalcula a posição automaticamente sempre que o conteúdo da página aumentar/mudar (ex: após carregar chamados)
+                let observer;
+                if (scrollAreaRef.current) {
+                    observer = new MutationObserver(() => handleScroll());
+                    observer.observe(scrollAreaRef.current, { childList: true, subtree: true });
+                }
+
+                return () => {
+                    window.removeEventListener('resize', handleScroll);
+                    if (observer) observer.disconnect();
+                };
+            }, []);
 
             // Global Chat States
             const [isGcOpen, setIsGcOpen] = useState(false);
