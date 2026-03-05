@@ -105,7 +105,7 @@
             Building2, ChevronDown, Check, ArrowUpCircle, EyeOff, UserPlus, StickyNote, Users, MapPin, X, ChevronRight, ChevronLeft, AlignLeft,
             AlertTriangle, RotateCcw, UserMinus, ShieldAlert, BarChart3, Filter, FileText, Image as ImageIcon, Paperclip, Wrench, Edit, Trash2,
             PackagePlus, Plus, Minus, Maximize2, Layers, Download, AlertOctagon, Terminal, Database, Smartphone, Mouse, Keyboard, Headphones, Cpu,
-            HardDrive, ArrowLeftRight, ArchiveRestore, Kanban, BookOpen, ListTodo, CheckSquare, Repeat, Circle, Megaphone, Info, Menu
+            HardDrive, ArrowLeftRight, ArchiveRestore, Kanban, BookOpen, ListTodo, CheckSquare, Repeat, Circle, Megaphone, Info, Menu, Reply
         } from 'lucide-react';
         import { initializeApp, getApps, getApp } from 'firebase/app';
         import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, arrayUnion, deleteDoc, setDoc } from 'firebase/firestore';
@@ -432,8 +432,11 @@
             const gcEndRef = useRef(null);
             const [gcMessageLimit, setGcMessageLimit] = useState(50);
             const [ticketMessageLimit, setTicketMessageLimit] = useState(50);
+            const [editingGcMsgId, setEditingGcMsgId] = useState(null);
+            const [editingGcMsgText, setEditingGcMsgText] = useState('');
+            const [replyingToGcMsg, setReplyingToGcMsg] = useState(null);
 
-            useEffect(() => { setGcMessageLimit(50); }, [gcActiveRoom, isGcOpen]);
+            useEffect(() => { setGcMessageLimit(50); setReplyingToGcMsg(null); }, [gcActiveRoom, isGcOpen]);
             useEffect(() => { setTicketMessageLimit(50); }, [expandedChatId, activeChatTab]);
 
             // Refs for Charts
@@ -881,8 +884,17 @@
                     timestamp: new Date().toISOString()
                 };
 
+                if (replyingToGcMsg) {
+                    newMessage.replyTo = {
+                        id: replyingToGcMsg.id,
+                        sender: replyingToGcMsg.sender,
+                        text: replyingToGcMsg.text
+                    };
+                }
+
                 input.value = '';
                 input.style.height = 'auto';
+                setReplyingToGcMsg(null);
                 
                 const docRef = doc(db, 'global_chats', roomId);
                 const roomExists = globalChats.some(c => c.id === roomId);
@@ -896,6 +908,19 @@
                     markGcAsRead(roomId);
                     setTimeout(() => gcEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
                 } catch (error) { showToast("Erro ao enviar mensagem", "error"); }
+            };
+
+            const handleEditGcMessageSubmit = async (e, roomId, msgId) => {
+                e.preventDefault();
+                if (!editingGcMsgText.trim()) return;
+                const roomData = globalChats.find(c => c.id === roomId);
+                if (!roomData) return;
+                const updatedMessages = roomData.messages.map(m => m.id === msgId ? { ...m, text: editingGcMsgText.trim(), editedAt: new Date().toISOString() } : m);
+                try {
+                    await updateDoc(doc(db, 'global_chats', roomId), { messages: updatedMessages });
+                    setEditingGcMsgId(null);
+                    setEditingGcMsgText('');
+                } catch (error) { showToast("Erro ao editar mensagem", "error"); }
             };
 
             const requestNotificationPermission = async () => {
@@ -2544,6 +2569,9 @@
                                                         const isInternalRoom = activeRoomId === 'internal_tech_room';
                                                         const isMe = isAdmin ? (isInternalRoom ? m.sender === techName : m.senderRole === 'tech') : m.senderRole === 'user';
                                                         
+                                                        // Nova lógica: Apenas o autor exato da mensagem pode editá-la
+                                                        const canEdit = isAdmin ? m.sender === techName : (gcUser && m.sender === gcUser.name);
+                                                        
                                                         const msgDateStr = new Date(m.timestamp).toDateString();
                                                         const prevMsg = idx > 0 ? messagesToShow[idx - 1] : null;
                                                         const prevDateStr = prevMsg ? new Date(prevMsg.timestamp).toDateString() : null;
@@ -2572,11 +2600,41 @@
                                                                         <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
                                                                     </div>
                                                                 )}
-                                                                <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
-                                                                    <span className="text-[9px] font-bold text-slate-400 mb-1 px-2">{m.sender} • {formatTimestamp({toDate: () => new Date(m.timestamp)})}</span>
-                                                                    <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs break-words whitespace-pre-wrap ${bubbleClass}`}>
-                                                                        {m.text}
-                                                                    </div>
+                                                                <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 group/msg relative`}>
+                                                                    <span className="text-[9px] font-bold text-slate-400 mb-1 px-2 flex items-center gap-1">
+                                                                        {m.sender} • {formatTimestamp({toDate: () => new Date(m.timestamp)})}
+                                                                        {m.editedAt && <span className="italic opacity-70">(editado)</span>}
+                                                                    </span>
+                                                                    
+                                                                    {editingGcMsgId === m.id ? (
+                                                                        <form onSubmit={(e) => handleEditGcMessageSubmit(e, activeRoomId, m.id)} className={`w-full max-w-[85%] flex flex-col gap-2 p-3 rounded-2xl shadow-md ${bubbleClass}`}>
+                                                                            <textarea autoFocus value={editingGcMsgText} onChange={(e) => setEditingGcMsgText(e.target.value)} className="w-full bg-black/10 dark:bg-black/20 text-inherit p-2 rounded-xl text-xs outline-none resize-none font-medium" rows="2" onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleEditGcMessageSubmit(e, activeRoomId, m.id); } else if (e.key === 'Escape') { setEditingGcMsgId(null); setEditingGcMsgText(''); } }} />
+                                                                            <div className="flex justify-end gap-3 items-center mt-1">
+                                                                                <button type="button" onClick={() => { setEditingGcMsgId(null); setEditingGcMsgText(''); }} className="text-[10px] font-bold opacity-70 hover:opacity-100 uppercase tracking-widest">Cancelar</button>
+                                                                                <button type="submit" className="text-[10px] font-bold bg-black/20 hover:bg-black/30 px-3 py-1.5 rounded-lg uppercase tracking-widest transition-colors shadow-sm">Salvar</button>
+                                                                            </div>
+                                                                        </form>
+                                                                    ) : (
+                                                                        <div className="relative group/bubble flex items-end gap-2 max-w-[85%]">
+                                                                            <div className={`opacity-0 group-hover/bubble:opacity-100 transition-opacity flex items-center gap-0.5 absolute bottom-1 ${isMe ? 'right-full mr-1' : 'left-full ml-1'}`}>
+                                                                                {canEdit && (
+                                                                                    <button onClick={() => { setEditingGcMsgId(m.id); setEditingGcMsgText(m.text); }} className={`p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors`} title="Editar mensagem"><Edit size={12} /></button>
+                                                                                )}
+                                                                                <button onClick={() => setReplyingToGcMsg(m)} className={`p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors`} title="Responder"><Reply size={12} /></button>
+                                                                            </div>
+                                                                            <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} w-full gap-1`}>
+                                                                                {m.replyTo && (
+                                                                                    <div className={`flex items-center gap-1.5 text-[9px] opacity-75 bg-slate-200/50 dark:bg-slate-700/50 px-2 py-1 rounded-lg max-w-full ${isMe ? 'flex-row-reverse text-right' : 'text-left'}`}>
+                                                                                        <Reply size={10} className="shrink-0" />
+                                                                                        <span className="truncate max-w-[150px]"><span className="font-bold">{m.replyTo.sender}:</span> {m.replyTo.text}</span>
+                                                                                    </div>
+                                                                                )}
+                                                                                <div className={`w-full px-3 py-2 rounded-2xl text-xs break-words whitespace-pre-wrap ${bubbleClass}`}>
+                                                                                    {m.text}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </React.Fragment>
                                                         );
@@ -2584,7 +2642,16 @@
                                                 })()}
                                                 <div ref={gcEndRef} />
                                             </div>
-                                            <div className={`p-3 bg-white dark:bg-slate-900 border-t shrink-0 ${isAdmin && gcActiveRoom === 'internal_tech_room' ? 'border-orange-100 dark:border-orange-900/50' : 'border-slate-100 dark:border-slate-800'}`}>
+                                            <div className={`p-3 bg-white dark:bg-slate-900 border-t shrink-0 flex flex-col gap-2 ${isAdmin && gcActiveRoom === 'internal_tech_room' ? 'border-orange-100 dark:border-orange-900/50' : 'border-slate-100 dark:border-slate-800'}`}>
+                                                {replyingToGcMsg && (
+                                                    <div className="flex items-center justify-between bg-slate-100 dark:bg-slate-800 p-2 rounded-xl border dark:border-slate-700 text-xs shadow-inner animate-in fade-in slide-in-from-bottom-2">
+                                                        <div className={`flex flex-col truncate pr-2 border-l-2 pl-2 ${isAdmin && gcActiveRoom === 'internal_tech_room' ? 'border-orange-500' : 'border-blue-500'}`}>
+                                                            <span className={`font-bold text-[10px] uppercase tracking-widest ${isAdmin && gcActiveRoom === 'internal_tech_room' ? 'text-orange-600 dark:text-orange-400' : 'text-blue-600 dark:text-blue-400'}`}>Respondendo a {replyingToGcMsg.sender}</span>
+                                                            <span className="truncate text-slate-500 dark:text-slate-400 text-xs">{replyingToGcMsg.text}</span>
+                                                        </div>
+                                                        <button type="button" onClick={() => setReplyingToGcMsg(null)} className="p-1.5 text-slate-400 hover:text-red-500 bg-white dark:bg-slate-900 rounded-lg shadow-sm transition-colors shrink-0"><X size={14} /></button>
+                                                    </div>
+                                                )}
                                                 <form onSubmit={handleSendGcMessage} className="flex items-end gap-2">
                                                     <textarea name="gcMsgInput" rows="1" placeholder="Mensagem..." className="flex-1 bg-slate-50 dark:bg-slate-800 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs outline-none focus:ring-2 focus:ring-blue-500 dark:text-white resize-none overflow-hidden transition-all" style={{ minHeight: '38px', maxHeight: '100px' }} onInput={(e) => { e.target.style.height = 'auto'; e.target.style.height = `${e.target.scrollHeight}px`; }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendGcMessage({preventDefault: () => {}, target: e.target.form}); } }} />
                                                     <button type="submit" className={`p-2.5 text-white rounded-xl shadow-md transition-colors shrink-0 mb-0.5 active:scale-95 ${isAdmin && gcActiveRoom === 'internal_tech_room' ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-500/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'}`}><Send size={16} /></button>
