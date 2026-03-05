@@ -1855,10 +1855,10 @@
                                     paginatedEquipments.map(eq => (
                                     <div key={eq.id} className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-shadow">
                                         <div className="flex flex-col lg:flex-row gap-6 lg:items-center justify-between">
-                                        <div className="flex items-center gap-4">
-                                            <div className={`p-4 rounded-2xl ${eq.type === 'Celular' ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20' : eq.type === 'Desktop' ? 'bg-orange-50 text-orange-600 dark:bg-orange-900/20' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}`}>{eq.type === 'Celular' || eq.type === 'Tablet' ? <Smartphone size={28}/> : eq.type === 'Desktop' ? <Cpu size={28}/> : <Laptop size={28}/>}</div>
-                                            <div>
-                                                <h4 className="text-lg font-black dark:text-white leading-tight">{eq.model}</h4>
+                                        <div className="flex items-center gap-4 min-w-0 lg:max-w-xs xl:max-w-sm">
+                                            <div className={`shrink-0 p-4 rounded-2xl ${eq.type === 'Celular' ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20' : eq.type === 'Desktop' ? 'bg-orange-50 text-orange-600 dark:bg-orange-900/20' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}`}>{eq.type === 'Celular' || eq.type === 'Tablet' ? <Smartphone size={28}/> : eq.type === 'Desktop' ? <Cpu size={28}/> : <Laptop size={28}/>}</div>
+                                            <div className="min-w-0 flex-1">
+                                                <h4 className="text-lg font-black dark:text-white leading-tight truncate md:whitespace-normal md:line-clamp-2 lg:line-clamp-none break-words" title={eq.model}>{eq.model}</h4>
                                                 <div className="flex items-center flex-wrap gap-2 mt-1">
                                                     <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md uppercase tracking-wider">{eq.type}</span>
                                                     {eq.deviceId && <span className="text-[10px] font-mono font-bold text-slate-400 px-2 py-0.5 border dark:border-slate-700 rounded-md"><Hash size={10} className="inline mr-1 -mt-0.5"/>{eq.deviceId}</span>}
@@ -1913,10 +1913,10 @@
                                     decommissionedEquipments.map(eq => (
                                     <div key={eq.id} className="bg-red-50/50 dark:bg-slate-900 border border-red-200 dark:border-red-900/50 rounded-3xl p-5 shadow-sm hover:shadow-md transition-shadow">
                                         <div className="flex flex-col lg:flex-row gap-6 lg:items-center justify-between">
-                                        <div className="flex items-center gap-4 opacity-80">
-                                            <div className="p-4 rounded-2xl bg-red-100 text-red-600 dark:bg-red-900/30">{eq.type === 'Celular' || eq.type === 'Tablet' ? <Smartphone size={28}/> : eq.type === 'Desktop' ? <Cpu size={28}/> : <Laptop size={28}/>}</div>
-                                            <div>
-                                                <h4 className="text-lg font-black dark:text-white leading-tight">{eq.model}</h4>
+                                        <div className="flex items-center gap-4 opacity-80 min-w-0 lg:max-w-xs xl:max-w-sm">
+                                            <div className="shrink-0 p-4 rounded-2xl bg-red-100 text-red-600 dark:bg-red-900/30">{eq.type === 'Celular' || eq.type === 'Tablet' ? <Smartphone size={28}/> : eq.type === 'Desktop' ? <Cpu size={28}/> : <Laptop size={28}/>}</div>
+                                            <div className="min-w-0 flex-1">
+                                                <h4 className="text-lg font-black dark:text-white leading-tight truncate md:whitespace-normal md:line-clamp-2 lg:line-clamp-none break-words" title={eq.model}>{eq.model}</h4>
                                                 <div className="flex items-center flex-wrap gap-2 mt-1">
                                                     <span className="text-[10px] font-bold text-slate-500 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md uppercase tracking-wider">{eq.type}</span>
                                                     {eq.deviceId && <span className="text-[10px] font-mono font-bold text-slate-400 px-2 py-0.5 border border-red-100 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-md"><Hash size={10} className="inline mr-1 -mt-0.5"/>{eq.deviceId}</span>}
