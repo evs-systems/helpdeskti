@@ -2544,18 +2544,41 @@
                                                         const isInternalRoom = activeRoomId === 'internal_tech_room';
                                                         const isMe = isAdmin ? (isInternalRoom ? m.sender === techName : m.senderRole === 'tech') : m.senderRole === 'user';
                                                         
+                                                        const msgDateStr = new Date(m.timestamp).toDateString();
+                                                        const prevMsg = idx > 0 ? messagesToShow[idx - 1] : null;
+                                                        const prevDateStr = prevMsg ? new Date(prevMsg.timestamp).toDateString() : null;
+                                                        const showDateHeader = msgDateStr !== prevDateStr;
+
                                                         let bubbleClass = isMe ? 'bg-blue-600 text-white rounded-tr-sm shadow-md' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-100 dark:border-slate-700 rounded-tl-sm shadow-sm';
                                                         if (isInternalRoom) {
                                                             bubbleClass = isMe ? 'bg-orange-500 text-white rounded-tr-sm shadow-md' : 'bg-white dark:bg-slate-800 text-orange-900 dark:text-orange-100 border border-orange-100 dark:border-orange-800 rounded-tl-sm shadow-sm';
                                                         }
 
                                                         return (
-                                                            <div key={m.id || idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
-                                                                <span className="text-[9px] font-bold text-slate-400 mb-1 px-2">{m.sender} • {formatTimestamp({toDate: () => new Date(m.timestamp)})}</span>
-                                                                <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs break-words whitespace-pre-wrap ${bubbleClass}`}>
-                                                                    {m.text}
+                                                            <React.Fragment key={m.id || idx}>
+                                                                {showDateHeader && (
+                                                                    <div className="flex items-center justify-center my-4 opacity-70">
+                                                                        <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+                                                                        <span className="px-3 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                                                            {(() => {
+                                                                                const d = new Date(m.timestamp);
+                                                                                const today = new Date();
+                                                                                const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+                                                                                if (d.toDateString() === today.toDateString()) return "Hoje";
+                                                                                if (d.toDateString() === yesterday.toDateString()) return "Ontem";
+                                                                                return d.toLocaleDateString('pt-BR');
+                                                                            })()}
+                                                                        </span>
+                                                                        <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+                                                                    </div>
+                                                                )}
+                                                                <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
+                                                                    <span className="text-[9px] font-bold text-slate-400 mb-1 px-2">{m.sender} • {formatTimestamp({toDate: () => new Date(m.timestamp)})}</span>
+                                                                    <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs break-words whitespace-pre-wrap ${bubbleClass}`}>
+                                                                        {m.text}
+                                                                    </div>
                                                                 </div>
-                                                            </div>
+                                                            </React.Fragment>
                                                         );
                                                     })}</>);
                                                 })()}
