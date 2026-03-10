@@ -2407,28 +2407,19 @@
                                                         )}
                                                         {((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages).slice(Math.max(0, ((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages).length - ticketMessageLimit)).map((m, idx) => {
                                                         const isInternal = activeChatTab === 'internal';
-                                                        const isMyMessage = m.sender === techName;
+                                                        const isMe = isAdmin ? (isInternal ? m.sender === techName : m.senderRole === 'tech') : m.senderRole === 'user';
                                                         
-                                                        let alignmentClass = m.senderRole === 'tech' ? 'items-start' : 'items-end';
-                                                        if (isInternal) {
-                                                            alignmentClass = isMyMessage ? 'items-end' : 'items-start';
-                                                        }
+                                                        const alignmentClass = isMe ? 'items-end' : 'items-start';
                                                         
-                                                        let bubbleClass = '';
+                                                        let bubbleClass = isMe ? 'bg-blue-600 text-white rounded-tr-sm shadow-md' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-100 dark:border-slate-700 rounded-tl-sm shadow-sm';
                                                         if (isInternal) {
-                                                            if (isMyMessage) {
-                                                                bubbleClass = 'bg-orange-500 text-white shadow-md shadow-orange-500/20';
-                                                            } else {
-                                                                bubbleClass = 'bg-orange-100 dark:bg-orange-900/60 text-orange-900 dark:text-orange-100 border border-orange-200 dark:border-orange-800/50';
-                                                            }
-                                                        } else {
-                                                            bubbleClass = m.senderRole === 'tech' ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border dark:border-slate-700' : 'bg-blue-600 text-white shadow-lg shadow-blue-500/10';
+                                                            bubbleClass = isMe ? 'bg-orange-500 text-white rounded-tr-sm shadow-md' : 'bg-orange-100 dark:bg-orange-900/60 text-orange-900 dark:text-orange-100 border border-orange-200 dark:border-orange-800/50 rounded-tl-sm shadow-sm';
                                                         }
 
                                                         return (
-                                                            <div key={idx} className={`flex flex-col ${alignmentClass}`}>
+                                                            <div key={idx} className={`flex flex-col ${alignmentClass} animate-in fade-in slide-in-from-bottom-2`}>
                                                                 <span className="text-[10px] font-bold text-slate-400 mb-1 px-2">{m.sender} • {formatTimestamp({toDate: () => new Date(m.timestamp)})}</span>
-                                                                <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm shadow-sm transition-all overflow-hidden ${bubbleClass}`}>
+                                                                <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm transition-all overflow-hidden ${bubbleClass}`}>
                                                                     {m.image && (<div className="mb-2 -mx-2 -mt-2 group relative cursor-zoom-in" onClick={() => openImageViewer(m.image, ticket)}><img src={m.image} alt="Anexo" className="w-full h-auto rounded-t-xl max-h-60 object-cover" /><div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center"><Maximize2 className="text-white opacity-0 group-hover:opacity-100 drop-shadow-md" size={24} /></div></div>)}
                                                                     {m.text && <p className="whitespace-pre-wrap break-words">{m.text}</p>}
                                                                 </div>
