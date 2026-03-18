@@ -846,7 +846,17 @@
                 if (isGcOpen) {
                     if (!isAdmin && gcUser) markGcAsRead(`${normalizeSearch(gcUser.unit)}_${normalizeSearch(gcUser.sector)}`);
                     else if (isAdmin && gcActiveRoom) markGcAsRead(gcActiveRoom);
-                    setTimeout(() => gcEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 150);
+                    
+                    if (gcActiveRoom || (!isAdmin && gcUser)) {
+                        // Rolagem padrão para o fim ao entrar em um chat
+                        setTimeout(() => gcEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 150);
+                    } else if (isAdmin && !gcActiveRoom) {
+                        // Rolagem para o topo ao voltar para a lista de salas
+                        setTimeout(() => {
+                            const list = document.getElementById('gc-room-list');
+                            if (list) list.scrollTo({ top: 0, behavior: 'smooth' });
+                        }, 50);
+                    }
                 }
             }, [isGcOpen, gcActiveRoom, globalChats, isAdmin, gcUser]);
 
@@ -2490,7 +2500,7 @@
                                             <button type="submit" className="w-full py-3 mt-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-all active:scale-95">Iniciar Chat</button>
                                         </form>
                                     ) : isAdmin && !gcActiveRoom ? (
-                                        <div className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-2">
+                                        <div id="gc-room-list" className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-2">
                                             {/* Chat Interno da Equipe TI */}
                                             {(() => {
                                                 const internalRoom = globalChats.find(c => c.id === 'internal_tech_room');
