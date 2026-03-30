@@ -955,7 +955,15 @@
                 requestNotificationPermission(); // Pede permissão de notificação do SO
                 
                 const unsubAvisos = onSnapshot(collection(db, 'avisos'), (snapshot) => {
-                    setAnnouncements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
+                    const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    const priorityScore = { critical: 1, warning: 2, info: 3 };
+                    const sortedAvisos = docs.sort((a, b) => {
+                        const pA = priorityScore[a.type] || 4;
+                        const pB = priorityScore[b.type] || 4;
+                        if (pA !== pB) return pA - pB;
+                        return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+                    });
+                    setAnnouncements(sortedAvisos);
                     
                     if (!isInitialLoadAvisos.current) {
                         snapshot.docChanges().forEach((change) => {
@@ -1246,14 +1254,18 @@
             };
 
             const handleRemoveAttachment = async (collectionName, currentData, setCurrentData, attachmentToRemove) => {
-                if(!window.confirm("Deseja remover este anexo?")) return;
-                setIsSubmitting(true);
-                try {
-                    const newAttachments = currentData.attachments.filter(a => a.url !== attachmentToRemove.url);
-                    await updateDoc(doc(db, collectionName, currentData.id), { attachments: newAttachments, updatedAt: serverTimestamp() });
-                    setCurrentData(prev => ({...prev, attachments: newAttachments}));
-                    showToast("Anexo removido.", "success");
-                } catch(e) { showToast("Erro ao remover anexo.", "error"); } finally { setIsSubmitting(false); }
+                setConfirmationModal({
+                    message: "Deseja remover este anexo?",
+                    onConfirm: async () => {
+                        setIsSubmitting(true);
+                        try {
+                            const newAttachments = currentData.attachments.filter(a => a.url !== attachmentToRemove.url);
+                            await updateDoc(doc(db, collectionName, currentData.id), { attachments: newAttachments, updatedAt: serverTimestamp() });
+                            setCurrentData(prev => ({...prev, attachments: newAttachments}));
+                            showToast("Anexo removido.", "success");
+                        } catch(e) { showToast("Erro ao remover anexo.", "error"); } finally { setIsSubmitting(false); }
+                    }
+                });
             };
 
             const setPresetDate = (mode) => {
@@ -1436,7 +1448,14 @@
                 } catch(err) { showToast("Erro ao salvar tarefa.", "error"); } setIsSubmitting(false);
             };
             
-            const handleDeleteKanbanCard = async () => { if (window.confirm("Deseja mesmo excluir esta tarefa permanentemente?")) { try { await deleteDoc(doc(db, 'kanban_cards', selectedKanbanCard.id)); showToast("Tarefa excluída.", "success"); setIsKanbanCardModalOpen(false); setSelectedKanbanCard(null); } catch(e) { showToast("Erro ao excluir", "error"); } } };
+            const handleDeleteKanbanCard = async () => {
+                setConfirmationModal({
+                    message: "Deseja mesmo excluir esta tarefa permanentemente?",
+                    onConfirm: async () => {
+                        try { await deleteDoc(doc(db, 'kanban_cards', selectedKanbanCard.id)); showToast("Tarefa excluída.", "success"); setIsKanbanCardModalOpen(false); setSelectedKanbanCard(null); } catch(e) { showToast("Erro ao excluir", "error"); }
+                    }
+                });
+            };
             
             const handleAddKanbanComment = async (e) => {
                 e.preventDefault(); const input = e.target.comment; const text = input.value;
@@ -1453,7 +1472,14 @@
                 } catch(err) { showToast("Erro ao salvar informação.", "error"); } setIsSubmitting(false);
             };
             
-            const handleDeleteKbCard = async () => { if (window.confirm("Deseja excluir esta informação de forma permanente?")) { try { await deleteDoc(doc(db, 'kb_cards', selectedKbCard.id)); showToast("Informação excluída.", "success"); setIsKbCardModalOpen(false); setSelectedKbCard(null); } catch(e) { showToast("Erro ao excluir", "error"); } } };
+            const handleDeleteKbCard = async () => {
+                setConfirmationModal({
+                    message: "Deseja excluir esta informação de forma permanente?",
+                    onConfirm: async () => {
+                        try { await deleteDoc(doc(db, 'kb_cards', selectedKbCard.id)); showToast("Informação excluída.", "success"); setIsKbCardModalOpen(false); setSelectedKbCard(null); } catch(e) { showToast("Erro ao excluir", "error"); }
+                    }
+                });
+            };
 
             const handleEditEquipment = (eq) => { setEqForm({ type: eq.type || 'Notebook', model: eq.model || '', specs: eq.specs || '', acquisitionDate: eq.acquisitionDate || '', warrantyDate: eq.warrantyDate || '', price: eq.price || '', deviceId: eq.deviceId || '', serialNumber: eq.serialNumber || '', ipAddress: eq.ipAddress || '', status: eq.status || 'guardado', unit: eq.unit || '', department: eq.department || '', operator: eq.operator || '', anydeskId: eq.anydeskId || '' }); setEditingEqId(eq.id); setIsEqModalOpen(true); };
             
@@ -1524,9 +1550,12 @@
             };
 
             const handleDeleteChecklist = async () => {
-                if (window.confirm("Deseja mesmo excluir esta tarefa permanentemente?")) {
-                    try { await deleteDoc(doc(db, 'checklists', selectedChecklist.id)); showToast("Tarefa excluída.", "success"); setIsChecklistModalOpen(false); setSelectedChecklist(null); } catch(e) { showToast("Erro ao excluir", "error"); }
-                }
+                setConfirmationModal({
+                    message: "Deseja mesmo excluir esta tarefa permanentemente?",
+                    onConfirm: async () => {
+                        try { await deleteDoc(doc(db, 'checklists', selectedChecklist.id)); showToast("Tarefa excluída.", "success"); setIsChecklistModalOpen(false); setSelectedChecklist(null); } catch(e) { showToast("Erro ao excluir", "error"); }
+                    }
+                });
             };
 
             const handleCompleteTask = async (task) => {
