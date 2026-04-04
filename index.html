@@ -781,7 +781,18 @@
             }, []);
 
             useEffect(() => { localStorage.setItem('helpdesk_read_times', JSON.stringify(lastReadTimes)); }, [lastReadTimes]);
-            useEffect(() => { localStorage.setItem('helpdesk_dark_mode', isDarkMode); }, [isDarkMode]);
+            
+            // NOVO EFEITO: Sincroniza o modo escuro nativamente com o HTML/Body e Meta Tags (para Safari/iOS)
+            useEffect(() => { 
+                localStorage.setItem('helpdesk_dark_mode', isDarkMode); 
+                const bgColor = isDarkMode ? '#020617' : '#f8fafc'; // slate-950 ou slate-50
+                document.documentElement.classList.toggle('dark', isDarkMode);
+                document.documentElement.style.backgroundColor = bgColor;
+                document.body.style.backgroundColor = bgColor;
+                let metaThemeColor = document.querySelector('meta[name="theme-color"]');
+                if (metaThemeColor) metaThemeColor.setAttribute('content', bgColor);
+            }, [isDarkMode]);
+
             useEffect(() => { localStorage.setItem('helpdesk_gc_reads', JSON.stringify(gcReadTimes)); }, [gcReadTimes]);
             useEffect(() => { setDailyPhrase(MOTIVATIONAL_PHRASES[Math.floor(Math.random() * MOTIVATIONAL_PHRASES.length)]); }, []);
             
