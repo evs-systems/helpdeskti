@@ -436,6 +436,12 @@
             const [editingGcMsgText, setEditingGcMsgText] = useState('');
             const [replyingToGcMsg, setReplyingToGcMsg] = useState(null);
 
+            const prevGlobalChatsRef = useRef({});
+            const isInitialLoadGc = useRef(true);
+            const gcStateRef = useRef({ isOpen: false, room: null });
+
+            useEffect(() => { gcStateRef.current = { isOpen: isGcOpen, room: gcActiveRoom }; }, [isGcOpen, gcActiveRoom]);
+
             useEffect(() => { setGcMessageLimit(50); setReplyingToGcMsg(null); }, [gcActiveRoom, isGcOpen]);
             useEffect(() => { setTicketMessageLimit(50); }, [expandedChatId, activeChatTab]);
 
@@ -813,13 +819,66 @@
                 if (!user) return;
                 const unsub = onSnapshot(collection(db, 'global_chats'), (snapshot) => {
                     const chats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    if (!isInitialLoadGc.current) {
+                        snapshot.docChanges().forEach((change) => {
+                            const docId = change.doc.id;
+                            const currentData = change.doc.data();
+                            const prevData = prevGlobalChatsRef.current[docId];
+
+                            if (change.type === "added" || change.type === "modified") {
+                                const oldMsgs = prevData?.messages || [];
+                                const newMsgs = currentData.messages || [];
+                                
+                                if (newMsgs.length > oldMsgs.length) {
+                                    const lastMsg = newMsgs[newMsgs.length - 1];
+                                    
+                                    let shouldNotify = false;
+                                    if (isAdmin) {
+                                        if (docId === 'internal_tech_room') {
+                                            if (lastMsg.sender !== techName) shouldNotify = true;
+                                        } else {
+                                            if (lastMsg.senderRole === 'user') shouldNotify = true;
+                                        }
+                                    } else if (gcUser) {
+                                        const myRoomId = `${normalizeSearch(gcUser.unit)}_${normalizeSearch(gcUser.sector)}`;
+                                        if (docId === myRoomId && lastMsg.senderRole === 'tech') shouldNotify = true;
+                                    }
+
+                                    const { isOpen, room } = gcStateRef.current;
+                                    const isCurrentlyViewing = isOpen && (isAdmin ? room === docId : true);
+
+                                    if (shouldNotify && (!isCurrentlyViewing || document.hidden)) {
+                                        playSound('update');
+                                        const roomName = docId === 'internal_tech_room' ? 'Chat Interno TI' : (currentData.name || 'Chat Global');
+                                        showSystemNotification(`💬 ${roomName}`, `${lastMsg.sender}: ${lastMsg.text}`);
+                                        
+                                        if (!document.hidden) {
+                                            showToast(`Nova mensagem de ${lastMsg.sender}`, 'info', { 
+                                                label: 'Ver Chat', 
+                                                onClick: () => { 
+                                                    setIsGcOpen(true); 
+                                                    if (isAdmin) setGcActiveRoom(docId); 
+                                                } 
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                            prevGlobalChatsRef.current[docId] = currentData;
+                        });
+                    } else {
+                        snapshot.docs.forEach(doc => { prevGlobalChatsRef.current[doc.id] = doc.data(); });
+                        isInitialLoadGc.current = false;
+                    }
+                    
                     setGlobalChats(chats);
                 }, (err) => { 
                     console.warn("Erro no chat global:", err); 
                     if(err.code === 'permission-denied' && isAdmin) showToast("Adicione regras no Firebase para a coleção global_chats", "warning"); 
                 });
                 return () => unsub();
-            }, [user, isAdmin]);
+            }, [user, isAdmin, techName, gcUser]);
 
             const hasGcUnreadGlobal = useMemo(() => {
                 if (isAdmin) {
