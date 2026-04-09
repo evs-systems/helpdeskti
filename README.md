@@ -90,7 +90,7 @@ A aplicação funciona inteiramente no navegador, sem necessidade de backend pr�
 - Controle de áudio (ativar/desativar sons de notificação).
 - Frases motivacionais diárias no dashboard do técnico.
 
-
+---
 
 <p align="center">
   Desenvolvido com 💙 pela equipe de tecnologia da informação.
