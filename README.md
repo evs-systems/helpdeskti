@@ -92,6 +92,11 @@ A aplicação funciona inteiramente no navegador, sem necessidade de backend pr�
 
 ---
 
+### 📄 Licença
+Uso interno — Todos os direitos reservados.
+
+---
+
 <p align="center">
   Desenvolvido com 💙 pela equipe de tecnologia da informação.
 </p>
