@@ -4,14 +4,6 @@ Sistema completo de **Gestão de Chamados, Inventário e Organização** para eq
 
 ---
 
-## 📋 Índice
-
-- [Visão Geral](#-visão-geral)
-- [Funcionalidades](#-funcionalidades)
-- [Tecnologias](#-tecnologias)
-
----
-
 ## 🎯 Visão Geral
 
 O HelpDesk TI é uma plataforma projetada para centralizar e otimizar a operação de equipes de suporte técnico em ambientes corporativos com múltiplas unidades. Ele permite que **colaboradores** abram chamados e acompanhem o andamento em tempo real, enquanto **técnicos de TI** gerenciam todo o ciclo de vida do atendimento, inventário de equipamentos e tarefas internas — tudo em uma única interface.
