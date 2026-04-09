@@ -115,6 +115,8 @@ A aplicação funciona inteiramente no navegador, sem necessidade de backend pr�
 
 > **Nota:** A aplicação é um arquivo HTML único (`index.html`) que carrega todas as dependências via CDN, sem necessidade de build, bundler ou servidor Node.js.
 
+---
+
 <p align="center">
-  Desenvolvido com 💙 pela equipe de tecnologia da infomração.
+  Desenvolvido com 💙 pela equipe de tecnologia da informação.
 </p>
