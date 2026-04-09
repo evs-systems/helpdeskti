@@ -90,24 +90,7 @@ A aplicação funciona inteiramente no navegador, sem necessidade de backend pr�
 - Controle de áudio (ativar/desativar sons de notificação).
 - Frases motivacionais diárias no dashboard do técnico.
 
----
 
-## 🛠️ Tecnologias
-
-| Camada | Tecnologia | Uso |
-|--------|-----------|-----|
-| **UI Framework** | React 18 (via ESM CDN) | Componentes e estado |
-| **Estilização** | TailwindCSS (CDN) | Classes utilitárias e responsividade |
-| **Ícones** | Lucide React | Iconografia consistente |
-| **Gráficos** | Chart.js | Relatórios visuais |
-| **Transpilação** | Babel Standalone | JSX no navegador |
-| **Backend** | Firebase | Auth, Firestore, Storage |
-| **Hospedagem** | GitHub Pages | Deployment estático |
-| **PWA** | Service Worker + Manifest | Instalação como app |
-
-> **Nota:** A aplicação é um arquivo HTML único (`index.html`) que carrega todas as dependências via CDN, sem necessidade de build, bundler ou servidor Node.js.
-
----
 
 <p align="center">
   Desenvolvido com 💙 pela equipe de tecnologia da informação.
