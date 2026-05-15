@@ -6,7 +6,10 @@
     <meta name="theme-color" content="#2563eb">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://cdn.jsdelivr.net https://unpkg.com https://esm.sh https://www.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:; img-src 'self' data: blob: https://*.googleusercontent.com https://*.firebasestorage.app; media-src 'self' https://assets.mixkit.co; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' https://*.firebaseapp.com https://www.google.com; manifest-src 'self' blob:;">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>HelpDesk TI</title>
+    <script src="https://www.google.com/recaptcha/enterprise.js?render=6Ld7YOssAAAAAOhqaG7E6k-pevyxl-qyJgAuwaOu"></script>
     
     <script>
         (function() {
@@ -67,31 +70,27 @@
         })();
     </script>
     
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-        // Previne o erro "tailwind is not defined" em caso de carregamento assíncrono
-        if (typeof tailwind !== 'undefined') {
-            tailwind.config = { darkMode: 'class' };
-        } else {
-            window.tailwind = { config: { darkMode: 'class' } };
-        }
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
+    <style type="text/tailwindcss">
+        @custom-variant dark (&:where(.dark, .dark *));
+    </style>
     
     <script type="importmap">
     {
       "imports": {
-        "react": "https://esm.sh/react@18.2.0",
-        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-        "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react",
-        "firebase/app": "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js",
-        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js",
-        "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js",
-        "firebase/storage": "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js"
+        "react": "https://esm.sh/react@18.3.1",
+        "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+        "lucide-react": "https://esm.sh/lucide-react@1.16.0?external=react",
+        "firebase/app": "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js",
+        "firebase/storage": "https://www.gstatic.com/firebasejs/11.7.1/firebase-storage.js",
+        "firebase/app-check": "https://www.gstatic.com/firebasejs/11.7.1/firebase-app-check.js"
       }
     }
     </script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.4/babel.min.js"></script>
     <style>html, body, #root { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }</style>
 </head>
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -100,17 +99,19 @@
         import React, { useState, useEffect, useRef, useMemo } from 'react';
         import { createRoot } from 'react-dom/client';
         import { 
-            PlusCircle, CheckCircle, Clock, User, Settings, AlertCircle, Search, ClipboardList, Lock, LogOut, Sun, Moon,
+            CirclePlus as PlusCircle, CircleCheck as CheckCircle, Clock, User, Settings, CircleAlert as AlertCircle, Search, ClipboardList, Lock, LogOut, Sun, Moon,
             MessageSquare, Send, MessageCircle, Monitor, Hash, Laptop, Bell, Volume2, VolumeX, UserCheck, Archive, History, Calendar,
-            Building2, ChevronDown, Check, ArrowUpCircle, EyeOff, UserPlus, StickyNote, Users, MapPin, X, ChevronRight, ChevronLeft, AlignLeft,
-            AlertTriangle, RotateCcw, UserMinus, ShieldAlert, BarChart3, Filter, FileText, Image as ImageIcon, Paperclip, Wrench, Edit, Trash2,
-            PackagePlus, Plus, Minus, Maximize2, Layers, Download, AlertOctagon, Terminal, Database, Smartphone, Mouse, Keyboard, Headphones, Cpu,
-            HardDrive, ArrowLeftRight, ArchiveRestore, Kanban, BookOpen, ListTodo, CheckSquare, Repeat, Circle, Megaphone, Info, Menu, Reply
+            Building2, ChevronDown, Check, CircleArrowUp as ArrowUpCircle, EyeOff, UserPlus, StickyNote, Users, MapPin, X, ChevronRight, ChevronLeft, AlignLeft,
+            TriangleAlert as AlertTriangle, RotateCcw, UserMinus, ShieldAlert, BarChart3, Filter, FileText, Image as ImageIcon, Paperclip, Wrench, Edit, Trash2,
+            PackagePlus, Plus, Minus, Maximize2, Layers, Download, OctagonAlert as AlertOctagon, Terminal, Database, Smartphone, Mouse, Keyboard, Headphones, Cpu,
+            HardDrive, ArrowLeftRight, ArchiveRestore, Kanban, BookOpen, ListTodo, CheckSquare, Repeat, Circle, Megaphone, Info, Menu, Reply,
+            CircleCheckBig as CheckCircle2, ChevronUp, LayoutDashboard, Paperclip as Attachment, Database as Inventory, Kanban as Board, CheckSquare as Checklist, BookOpen as KB
         } from 'lucide-react';
         import { initializeApp, getApps, getApp } from 'firebase/app';
         import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, arrayUnion, deleteDoc, setDoc } from 'firebase/firestore';
         import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
         import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+        import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 
         const customScrollStyles = `
             ::-webkit-scrollbar { width: 10px; }
@@ -133,6 +134,13 @@
         };
 
         const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+        
+        // Inicialização do App Check com reCAPTCHA Enterprise
+        const appCheck = initializeAppCheck(app, {
+            provider: new ReCaptchaEnterpriseProvider('6Ld7YOssAAAAAOhqaG7E6k-pevyxl-qyJgAuwaOu'),
+            isTokenAutoRefreshEnabled: true
+        });
+
         const auth = getAuth(app);
         const db = getFirestore(app);
         const storage = getStorage(app);
