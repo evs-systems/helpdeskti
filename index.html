@@ -74,6 +74,14 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
     <style type="text/tailwindcss">
         @custom-variant dark (&:where(.dark, .dark *));
+        @layer base {
+          *, ::after, ::before {
+            border-color: var(--color-slate-200);
+          }
+          .dark *, .dark::after, .dark::before {
+            border-color: var(--color-slate-800);
+          }
+        }
     </style>
     <style>
         .grecaptcha-badge { visibility: hidden; }
@@ -1834,7 +1842,7 @@
                                 <button onClick={() => setIsAudioEnabled(!isAudioEnabled)} className={`p-2 rounded-xl transition-all ${isAudioEnabled ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>{isAudioEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}</button>
                                 <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">{isDarkMode ? <Sun size={20} /> : <Moon size={20} />}</button>
                                 <div className="h-6 w-[1px] bg-slate-200 mx-2 dark:bg-slate-700"></div>
-                                {!isAdmin ? (<button onClick={() => setView('login')} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 transition-all"><Lock size={16} /> <span>TI</span></button>) : (<button onClick={handleLogout} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 transition-all"><LogOut size={16} /> <span>Sair</span></button>)}
+                                {!isAdmin ? (<button onClick={() => setView('login')} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300 transition-all"><Lock size={16} /> <span>TI</span></button>) : (<button onClick={handleLogout} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 dark:hover:text-red-400 transition-all"><LogOut size={16} /> <span>Sair</span></button>)}
                             </div>
 
                             {/* --- MENU MOBILE (Telas Pequenas) --- */}
@@ -1872,9 +1880,9 @@
                                 </div>
 
                                 {!isAdmin ? (
-                                    <button onClick={() => { setView('login'); setIsMobileMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest py-3.5 mt-2 rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 transition-colors"><Lock size={16} /> Acesso TI</button>
+                                    <button onClick={() => { setView('login'); setIsMobileMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest py-3.5 mt-2 rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300 transition-colors"><Lock size={16} /> Acesso TI</button>
                                 ) : (
-                                    <button onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest py-3.5 mt-2 rounded-xl bg-red-50 text-red-600 dark:bg-red-900/20 transition-colors"><LogOut size={16} /> Sair do Sistema</button>
+                                    <button onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest py-3.5 mt-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 dark:hover:text-red-400 transition-colors"><LogOut size={16} /> Sair do Sistema</button>
                                 )}
                             </div>
                         )}
@@ -2412,9 +2420,6 @@
                             <div className="relative"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="password" placeholder="Senha" className="w-full pl-12 pr-5 py-3 border rounded-2xl bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-4 focus:ring-blue-500/10 font-bold transition-all" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} disabled={isLoggingIn} /></div>
                             {loginError && <p className="text-red-500 text-xs text-center font-bold">Falha na autenticação.</p>}
                             <button disabled={isLoggingIn} className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/30 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed">{isLoggingIn ? <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div> : 'Entrar'}</button>
-                            <p className="text-[10px] text-slate-400 text-center mt-4">
-                                Este site é protegido por reCAPTCHA e a <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer" className="underline hover:text-blue-500">Privacidade</a> e <a href="https://policies.google.com/terms" target="_blank" rel="noreferrer" className="underline hover:text-blue-500">Termos</a> do Google se aplicam.
-                            </p>
                             <button type="button" onClick={() => setView('landing')} className="w-full text-slate-400 text-sm font-bold py-2" disabled={isLoggingIn}>Voltar</button>
                             </form>
                         </div>
