@@ -491,6 +491,7 @@
             const [accForm, setAccForm] = useState({ type: 'Mouse', name: '', initialQuantity: 1, unit: '' });
             const [accMoveForm, setAccMoveForm] = useState({ action: 'out', quantity: 1, unit: '', department: '', notes: '' });
             const [isImportEqModalOpen, setIsImportEqModalOpen] = useState(false);
+            const [isImportAccModalOpen, setIsImportAccModalOpen] = useState(false);
 
             const [eqTypeFilter, setEqTypeFilter] = useState('Todos');
             const [eqUnitFilter, setEqUnitFilter] = useState('Todas');
@@ -561,6 +562,7 @@
             const accessUnitMenuRef = useRef(null);
             
             const eqCsvInputRef = useRef(null);
+            const accCsvInputRef = useRef(null);
 
             const chatEndRef = useRef(null);
             const audioNewRef = useRef(typeof Audio !== "undefined" ? new Audio(SOUND_NEW_TICKET) : null);
@@ -1643,6 +1645,58 @@
                 reader.readAsText(file);
             };
 
+            const handleExportAccCsv = () => {
+                if (filteredAccessories.length === 0) { showToast("Nenhum acessório para exportar.", "warning"); return; }
+                const headers = ["Tipo", "Descrição / Modelo", "Quantidade em Estoque", "Unidade / Localização"];
+                const csvRows = [headers.join(";")];
+                filteredAccessories.forEach(acc => {
+                    const row = [acc.type || "", acc.name || "", acc.quantity ?? "", acc.unit || ""].map(v => `"${String(v).replace(/"/g, '""')}"`);
+                    csvRows.push(row.join(";"));
+                });
+                const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", `acessorios_${new Date().toISOString().split('T')[0]}.csv`);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            };
+
+            const handleDownloadSampleAccCsv = () => {
+                const headers = ["Tipo", "Descrição / Modelo", "Quantidade em Estoque", "Unidade / Localização"];
+                const sampleRow = ["Mouse", "Mouse sem fio Logitech M170", "10", "Matriz"];
+                const csvRows = [headers.join(";"), sampleRow.join(";")];
+                const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", `modelo_importacao_acessorios.csv`);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            };
+
+            const handleImportAccCsv = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setIsSubmitting(true);
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    try {
+                        const text = event.target.result;
+                        const lines = text.split('\n').filter(line => line.trim() !== '');
+                        if (lines.length < 2) { showToast("CSV vazio ou inválido.", "error"); setIsSubmitting(false); return; }
+                        const parseCSVRow = (str) => { let res = []; let inQ = false; let cur = ''; for(let i=0; i<str.length; i++) { let c = str[i]; if(c === '"' && str[i+1] === '"') { cur += '"'; i++; } else if(c === '"') { inQ = !inQ; } else if(c === ';' && !inQ) { res.push(cur); cur = ''; } else { cur += c; } } res.push(cur); return res; };
+                        const headers = parseCSVRow(lines[0].trim());
+                        let successCount = 0;
+                        for (let i = 1; i < lines.length; i++) {
+                            const row = parseCSVRow(lines[i].trim());
+                            if (row.length < Math.min(headers.length, 2)) continue;
+                            const qty = parseInt(row[2], 10);
+                            const initialQty = isNaN(qty) ? 0 : qty;
+                            const accData = { type: row[0] || 'Outros', name: row[1] || '', quantity: initialQty, unit: row[3] || '', history: [{ date: new Date().toISOString(), user: techName, action: `Acessório importado em massa via planilha CSV. Estoque inicial: ${initialQty}` }], createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+                            if (accData.name) { await addDoc(collection(db, 'acessorios'), accData); successCount++; }
+                        }
+                        showToast(`${successCount} acessórios importados!`, "success");
+                        setIsImportAccModalOpen(false);
+                    } catch (err) { showToast("Erro ao processar CSV.", "error"); } finally { setIsSubmitting(false); e.target.value = ''; }
+                };
+                reader.readAsText(file);
+            };
+
             const handleEditAccessory = (acc) => { setAccForm({ type: acc.type || 'Mouse', name: acc.name || '', initialQuantity: acc.quantity || 0, unit: acc.unit || '' }); setEditingAccId(acc.id); setIsAccModalOpen(true); };
             
             const handleSaveAccessory = async (e) => { e.preventDefault(); setIsSubmitting(true); try { if (editingAccId) { await updateDoc(doc(db, 'acessorios', editingAccId), { type: accForm.type, name: accForm.name, quantity: parseInt(accForm.initialQuantity, 10), unit: accForm.unit, updatedAt: serverTimestamp(), history: arrayUnion({ date: new Date().toISOString(), user: techName, action: `Acessório editado/ajustado. Nova Qtd: ${accForm.initialQuantity}` }) }); showToast("Acessório atualizado com sucesso!", "success"); } else { await addDoc(collection(db, 'acessorios'), { type: accForm.type, name: accForm.name, quantity: parseInt(accForm.initialQuantity, 10), unit: accForm.unit, history: [{ date: new Date().toISOString(), user: techName, action: `Acessório cadastrado. Estoque inicial: ${accForm.initialQuantity}` }], createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); showToast("Acessório cadastrado com sucesso!", "success"); } setIsAccModalOpen(false); setEditingAccId(null); setAccForm({ type: 'Mouse', name: '', initialQuantity: 1, unit: '' }); } catch (err) { showToast("Erro ao salvar acessório", "error"); } finally { setIsSubmitting(false); } };
@@ -1808,6 +1862,37 @@
                                         </div>
                                         <input type="file" accept=".csv" className="hidden" ref={eqCsvInputRef} onChange={handleImportEqCsv} />
                                         <button onClick={() => eqCsvInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 border border-slate-700"><ArrowUpCircle size={16} /> {isSubmitting ? 'Processando...' : 'Selecionar e Importar CSV'}</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {isImportAccModalOpen && (
+                        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md border dark:border-slate-800 overflow-hidden">
+                                <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                                    <h3 className="text-lg font-bold dark:text-white flex items-center gap-2"><ArrowUpCircle size={20} className="text-blue-600"/> Importar Acessórios via CSV</h3>
+                                    <button onClick={() => setIsImportAccModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors"><X size={20}/></button>
+                                </div>
+                                <div className="p-6 space-y-6">
+                                    <p className="text-sm text-slate-600 dark:text-slate-300 font-medium">Para realizar o cadastro em massa, é necessário que o seu arquivo siga exatamente o padrão de colunas suportado pelo sistema.</p>
+                                    
+                                    <div className="bg-blue-50 dark:bg-blue-900/10 p-5 rounded-2xl border border-blue-100 dark:border-blue-900/30 flex flex-col items-start gap-3">
+                                        <div>
+                                            <p className="text-sm font-bold text-blue-800 dark:text-blue-300 mb-1">1. Baixe o modelo</p>
+                                            <p className="text-xs text-blue-600/80 dark:text-blue-400/80 mb-3">Baixe a planilha de exemplo e preencha-a com os dados dos seus acessórios sem alterar as colunas superiores.</p>
+                                        </div>
+                                        <button onClick={handleDownloadSampleAccCsv} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"><Download size={16} /> Baixar Modelo CSV</button>
+                                    </div>
+
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-start gap-3">
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">2. Envie o arquivo</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Após preencher e salvar o seu Excel como "CSV (separado por vírgulas)" (que no Brasil usa ponto e vírgula), envie-o abaixo.</p>
+                                        </div>
+                                        <input type="file" accept=".csv" className="hidden" ref={accCsvInputRef} onChange={handleImportAccCsv} />
+                                        <button onClick={() => accCsvInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 border border-slate-700"><ArrowUpCircle size={16} /> {isSubmitting ? 'Processando...' : 'Selecionar e Importar CSV'}</button>
                                     </div>
                                 </div>
                             </div>
@@ -2171,7 +2256,11 @@
                                         <button onClick={() => setAccViewMode('movements')} className={`flex-1 px-6 py-2 rounded-lg text-xs font-bold transition-all ${accViewMode === 'movements' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}>Relatório de Movimentações</button>
                                     </div>
                                 </div>
-                                <button onClick={() => { setEditingAccId(null); setAccForm({ type: 'Mouse', name: '', initialQuantity: 1, unit: '' }); setIsAccModalOpen(true); }} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20 w-full lg:w-auto shrink-0"><Plus size={16} /> Novo Acessório</button>
+                                <div className="flex items-center gap-2 w-full lg:w-auto shrink-0">
+                                    <button onClick={handleExportAccCsv} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-700 whitespace-nowrap" title="Baixar planilha com a lista filtrada"><Download size={14} /> <span className="hidden lg:inline">Exportar Planilha</span></button>
+                                    <button onClick={() => setIsImportAccModalOpen(true)} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-700 whitespace-nowrap" title="Cadastrar em massa através de planilha"><ArrowUpCircle size={14} /> <span className="hidden lg:inline">Importar Planilha</span></button>
+                                    <button onClick={() => { setEditingAccId(null); setAccForm({ type: 'Mouse', name: '', initialQuantity: 1, unit: '' }); setIsAccModalOpen(true); }} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20 whitespace-nowrap"><Plus size={16} /> <span className="hidden sm:inline">Novo Acessório</span></button>
+                                </div>
                                 </div>
 
                                 {accViewMode === 'stock' && (
