@@ -70,8 +70,8 @@
         })();
     </script>
     
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.1" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
     <style type="text/tailwindcss">
         @custom-variant dark (&:where(.dark, .dark *));
         @layer base {
@@ -101,7 +101,7 @@
       }
     }
     </script>
-    <script src="https://unpkg.com/@babel/standalone@7.29.4/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.6/babel.min.js" crossorigin="anonymous"></script>
     <style>html, body, #root { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }</style>
 </head>
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -1595,12 +1595,20 @@
             
             const handleRestoreEquipment = async (eq) => { try { await updateDoc(doc(db, 'equipamentos', eq.id), { status: 'guardado', updatedAt: serverTimestamp(), history: arrayUnion({ date: new Date().toISOString(), user: techName, action: `Equipamento restaurado para o estoque (Guardado).` }) }); showToast("Equipamento restaurado!", "success"); } catch (err) { showToast("Erro ao restaurar equipamento", "error"); } };
             
+            const sanitizeCsvCell = (val) => {
+                let str = String(val ?? '');
+                if (/^[=+\-@\t\r]/.test(str)) {
+                    str = "'" + str;
+                }
+                return `"${str.replace(/"/g, '""')}"`;
+            };
+
             const handleExportEqCsv = () => {
                 if (filteredEquipments.length === 0) { showToast("Nenhum equipamento para exportar.", "warning"); return; }
                 const headers = ["Tipo", "Modelo", "Nº Série", "ID Dispositivo", "IP", "AnyDesk", "Especificações", "Aquisição", "Garantia", "Preço", "Status", "Unidade", "Setor", "Operador"];
                 const csvRows = [headers.join(";")];
                 filteredEquipments.forEach(eq => {
-                    const row = [eq.type || "", eq.model || "", eq.serialNumber || "", eq.deviceId || "", eq.ipAddress || "", eq.anydeskId || "", eq.specs || "", eq.acquisitionDate || "", eq.warrantyDate || "", eq.price || "", eq.status || "", eq.unit || "", eq.department || "", eq.operator || ""].map(v => `"${String(v).replace(/"/g, '""')}"`);
+                    const row = [eq.type || "", eq.model || "", eq.serialNumber || "", eq.deviceId || "", eq.ipAddress || "", eq.anydeskId || "", eq.specs || "", eq.acquisitionDate || "", eq.warrantyDate || "", eq.price || "", eq.status || "", eq.unit || "", eq.department || "", eq.operator || ""].map(sanitizeCsvCell);
                     csvRows.push(row.join(";"));
                 });
                 const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
@@ -1650,7 +1658,7 @@
                 const headers = ["Tipo", "Descrição / Modelo", "Quantidade em Estoque", "Unidade / Localização"];
                 const csvRows = [headers.join(";")];
                 filteredAccessories.forEach(acc => {
-                    const row = [acc.type || "", acc.name || "", acc.quantity ?? "", acc.unit || ""].map(v => `"${String(v).replace(/"/g, '""')}"`);
+                    const row = [acc.type || "", acc.name || "", acc.quantity ?? "", acc.unit || ""].map(sanitizeCsvCell);
                     csvRows.push(row.join(";"));
                 });
                 const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
