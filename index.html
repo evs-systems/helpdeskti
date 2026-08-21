@@ -2224,7 +2224,7 @@
                         )}
 
                         {view === 'kanban' && isAdmin && (
-                          <div className="h-[calc(100vh-140px)] flex flex-col animate-in fade-in duration-500">
+                          <div className={`animate-in fade-in duration-500 ${kanbanTab === 'board' ? 'h-[calc(100vh-140px)] flex flex-col' : 'space-y-6'}`}>
                              <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border dark:border-slate-800">
                                 <div><h2 className="text-2xl font-black flex items-center gap-2 dark:text-white"><Kanban className="text-blue-600" /> Organização TI</h2><p className="text-slate-500 text-sm mt-1 font-medium">Gestão ágil de projetos e base de conhecimento.</p></div>
                                 <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl w-full sm:w-auto">
@@ -2254,8 +2254,8 @@
                              )}
 
                              {kanbanTab === 'kb' && (
-                                 <div className="flex-1 overflow-y-auto animate-in slide-in-from-right-4">
-                                     <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-1">
+                                 <div className="space-y-6 animate-in slide-in-from-right-4">
+                                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-1">
                                         <p className="text-xs text-slate-500 font-bold uppercase tracking-widest hidden md:block">Base de Conhecimento</p>
                                         <div className="flex w-full md:w-auto items-center gap-3">
                                             <div className="relative flex-1 md:w-64">
