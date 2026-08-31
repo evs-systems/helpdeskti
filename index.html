@@ -116,7 +116,7 @@
             TriangleAlert as AlertTriangle, RotateCcw, UserMinus, ShieldAlert, BarChart3, Filter, FileText, Image as ImageIcon, Paperclip, Wrench, Edit, Trash2,
             PackagePlus, Plus, Minus, Maximize2, Layers, Download, OctagonAlert as AlertOctagon, Terminal, Database, Smartphone, Mouse, Keyboard, Headphones, Cpu,
             HardDrive, ArrowLeftRight, ArchiveRestore, Kanban, BookOpen, ListTodo, CheckSquare, Repeat, Circle, Megaphone, Info, Menu, Reply,
-            CircleCheckBig as CheckCircle2, ChevronUp, LayoutDashboard, Paperclip as Attachment, Database as Inventory, Kanban as Board, CheckSquare as Checklist, BookOpen as KB
+            CircleCheckBig as CheckCircle2, ChevronUp, LayoutDashboard, LayoutGrid, List, Paperclip as Attachment, Database as Inventory, Kanban as Board, CheckSquare as Checklist, BookOpen as KB, Camera
         } from 'lucide-react';
         import { initializeApp, getApps, getApp } from 'firebase/app';
         import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, arrayUnion, deleteDoc, setDoc } from 'firebase/firestore';
@@ -756,10 +756,29 @@
             const [isAccMoveYearMenuOpen, setIsAccMoveYearMenuOpen] = useState(false);
             const accMoveMonthMenuRef = useRef(null);
             const accMoveYearMenuRef = useRef(null);
+            const accMoveTypeMenuRef = useRef(null); // Added missing ref
             const [accMoveTypeFilter, setAccMoveTypeFilter] = useState('Todos');
             const [isAccMoveTypeMenuOpen, setIsAccMoveTypeMenuOpen] = useState(false);
-            const accMoveTypeMenuRef = useRef(null);
             const [expandedAccGroups, setExpandedAccGroups] = useState({});
+
+            // Câmeras - Estados e Filtros
+            const [cameras, setCameras] = useState([]);
+            const [isCamModalOpen, setIsCamModalOpen] = useState(false);
+            const [editingCamId, setEditingCamId] = useState(null);
+            const [camForm, setCamForm] = useState({ name: '', model: '', unit: '', serialNumber: '', app: '', status: 'Normal', hasProblem: false, notes: '' });
+            const [camSearchTerm, setCamSearchTerm] = useState('');
+            const [camUnitFilter, setCamUnitFilter] = useState('Todas');
+            const [camStatusFilter, setCamStatusFilter] = useState('Todos');
+            const [isCamUnitMenuOpen, setIsCamUnitMenuOpen] = useState(false);
+            const [isCamFilterUnitMenuOpen, setIsCamFilterUnitMenuOpen] = useState(false);
+            const [isCamFilterStatusMenuOpen, setIsCamFilterStatusMenuOpen] = useState(false);
+            const [camViewMode, setCamViewMode] = useState(() => localStorage.getItem('camViewMode') || 'grid');
+            const [isImportCamModalOpen, setIsImportCamModalOpen] = useState(false);
+            const camCsvInputRef = useRef(null);
+
+            useEffect(() => {
+                localStorage.setItem('camViewMode', camViewMode);
+            }, [camViewMode]);
 
             const [kanbanTab, setKanbanTab] = useState('board');
             const [kanbanCards, setKanbanCards] = useState([]);
@@ -823,6 +842,9 @@
             const eqStatusMenuRef = useRef(null);
             const accFilterMenuRef = useRef(null);
             const accUnitFilterMenuRef = useRef(null);
+            const camUnitMenuRef = useRef(null);
+            const camFilterUnitMenuRef = useRef(null);
+            const camFilterStatusMenuRef = useRef(null);
             const kanbanStatusMenuRef = useRef(null);
 
             const dateFilter = useMemo(() => {
@@ -1322,31 +1344,49 @@
 
             useEffect(() => {
                 function handleClickOutside(event) {
-                    if (timeMenuRef.current && !timeMenuRef.current.contains(event.target)) setIsTimeMenuOpen(false);
-                    if (unitMenuRef.current && !unitMenuRef.current.contains(event.target)) setIsUnitMenuOpen(false);
-                    if (priorityMenuRef.current && !priorityMenuRef.current.contains(event.target)) setIsPriorityMenuOpen(false);
-                    if (typeMenuRef.current && !typeMenuRef.current.contains(event.target)) setIsTypeMenuOpen(false);
-                    if (monthMenuRef.current && !monthMenuRef.current.contains(event.target)) setIsMonthMenuOpen(false);
-                    if (yearMenuRef.current && !yearMenuRef.current.contains(event.target)) setIsYearMenuOpen(false);
-                    if (eqTypeMenuRef.current && !eqTypeMenuRef.current.contains(event.target)) setIsEqTypeMenuOpen(false);
-                    if (accTypeMenuRef.current && !accTypeMenuRef.current.contains(event.target)) setIsAccTypeMenuOpen(false);
-                    if (accUnitMenuRef.current && !accUnitMenuRef.current.contains(event.target)) setIsAccUnitMenuOpen(false);
-                    if (eqFilterMenuRef.current && !eqFilterMenuRef.current.contains(event.target)) setIsEqFilterMenuOpen(false);
-                    if (eqUnitMenuRef.current && !eqUnitMenuRef.current.contains(event.target)) setIsEqUnitMenuOpen(false);
-                    if (eqStatusMenuRef.current && !eqStatusMenuRef.current.contains(event.target)) setIsEqStatusMenuOpen(false);
-                    if (accFilterMenuRef.current && !accFilterMenuRef.current.contains(event.target)) setIsAccFilterMenuOpen(false);
-                    if (accUnitFilterMenuRef.current && !accUnitFilterMenuRef.current.contains(event.target)) setIsAccUnitFilterMenuOpen(false);
-                    if (kanbanStatusMenuRef.current && !kanbanStatusMenuRef.current.contains(event.target)) setIsKanbanStatusMenuOpen(false);
-                    if (recurrenceMenuRef.current && !recurrenceMenuRef.current.contains(event.target)) setIsRecurrenceMenuOpen(false);
-                    if (accMoveMonthMenuRef.current && !accMoveMonthMenuRef.current.contains(event.target)) setIsAccMoveMonthMenuOpen(false);
-                    if (accMoveYearMenuRef.current && !accMoveYearMenuRef.current.contains(event.target)) setIsAccMoveYearMenuOpen(false);
-                    if (accMoveTypeMenuRef.current && !accMoveTypeMenuRef.current.contains(event.target)) setIsAccMoveTypeMenuOpen(false);
-                    if (gcUnitMenuRef.current && !gcUnitMenuRef.current.contains(event.target)) setIsGcUnitMenuOpen(false);
-                    if (formUnitMenuRef.current && !formUnitMenuRef.current.contains(event.target)) setIsFormUnitMenuOpen(false);
-                    if (accessUnitMenuRef.current && !accessUnitMenuRef.current.contains(event.target)) setIsAccessUnitMenuOpen(false);
+                    try {
+                        const target = event.target;
+                        if (!target) return;
+                        const checkAndClose = (ref, setOpen) => {
+                            if (ref && ref.current && !ref.current.contains(target)) {
+                                setOpen(false);
+                            }
+                        };
+                        checkAndClose(timeMenuRef, setIsTimeMenuOpen);
+                        checkAndClose(unitMenuRef, setIsUnitMenuOpen);
+                        checkAndClose(priorityMenuRef, setIsPriorityMenuOpen);
+                        checkAndClose(typeMenuRef, setIsTypeMenuOpen);
+                        checkAndClose(monthMenuRef, setIsMonthMenuOpen);
+                        checkAndClose(yearMenuRef, setIsYearMenuOpen);
+                        checkAndClose(eqTypeMenuRef, setIsEqTypeMenuOpen);
+                        checkAndClose(accTypeMenuRef, setIsAccTypeMenuOpen);
+                        checkAndClose(accUnitMenuRef, setIsAccUnitMenuOpen);
+                        checkAndClose(eqFilterMenuRef, setIsEqFilterMenuOpen);
+                        checkAndClose(eqUnitMenuRef, setIsEqUnitMenuOpen);
+                        checkAndClose(eqStatusMenuRef, setIsEqStatusMenuOpen);
+                        checkAndClose(accFilterMenuRef, setIsAccFilterMenuOpen);
+                        checkAndClose(accUnitFilterMenuRef, setIsAccUnitFilterMenuOpen);
+                        checkAndClose(kanbanStatusMenuRef, setIsKanbanStatusMenuOpen);
+                        checkAndClose(recurrenceMenuRef, setIsRecurrenceMenuOpen);
+                        checkAndClose(accMoveMonthMenuRef, setIsAccMoveMonthMenuOpen);
+                        checkAndClose(accMoveYearMenuRef, setIsAccMoveYearMenuOpen);
+                        checkAndClose(accMoveTypeMenuRef, setIsAccMoveTypeMenuOpen);
+                        checkAndClose(gcUnitMenuRef, setIsGcUnitMenuOpen);
+                        checkAndClose(formUnitMenuRef, setIsFormUnitMenuOpen);
+                        checkAndClose(accessUnitMenuRef, setIsAccessUnitMenuOpen);
+                        checkAndClose(camUnitMenuRef, setIsCamUnitMenuOpen);
+                        checkAndClose(camFilterUnitMenuRef, setIsCamFilterUnitMenuOpen);
+                        checkAndClose(camFilterStatusMenuRef, setIsCamFilterStatusMenuOpen);
+                    } catch(err) {
+                        console.warn("Click outside error:", err);
+                    }
                 }
                 document.addEventListener("mousedown", handleClickOutside);
-                return () => document.removeEventListener("mousedown", handleClickOutside);
+                document.addEventListener("touchstart", handleClickOutside);
+                return () => {
+                    document.removeEventListener("mousedown", handleClickOutside);
+                    document.removeEventListener("touchstart", handleClickOutside);
+                };
             }, []);
 
             useEffect(() => {
@@ -1448,7 +1488,7 @@
             }, [user, isAdmin, techName, userSector, userUnit]);
 
             useEffect(() => {
-                if (!isAdmin || !user) { setEquipments([]); setAccessories([]); setKanbanCards([]); setKbCards([]); return; }
+                if (!isAdmin || !user) { setEquipments([]); setAccessories([]); setCameras([]); setKanbanCards([]); setKbCards([]); setChecklists([]); return; }
                 let isMounted = true;
                 const safeSetState = (setter, value) => { if (isMounted) setter(value); };
 
@@ -1460,12 +1500,16 @@
                     safeSetState(setAccessories, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
                 }, (error) => { if (error.code === 'permission-denied') safeSetState(setAccessories, []); });
 
+                const unsubCameras = onSnapshot(collection(db, 'cameras'), (snapshot) => {
+                    safeSetState(setCameras, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
+                }, (error) => { if (error.code === 'permission-denied') safeSetState(setCameras, []); });
+
                 const unsubKanban = onSnapshot(collection(db, 'kanban_cards'), (snapshot) => {
                     safeSetState(setKanbanCards, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
                 }, (error) => {
                     if (error.code === 'permission-denied') {
                         safeSetState(setKanbanCards, []);
-                        setFirebaseError({ title: "Acesso ao Kanban/KB/Checklists/Avisos Bloqueado", message: "Adicione as regras das novas coleções no seu Console Firebase (Firestore > Regras).", code: `match /kanban_cards/{doc=**} {\n  allow read, write: if request.auth != null;\n}\nmatch /kb_cards/{doc=**} {\n  allow read, write: if request.auth != null;\n}\nmatch /checklists/{doc=**} {\n  allow read, write: if request.auth != null;\n}\nmatch /avisos/{doc=**} {\n  allow read, write: if request.auth != null;\n}` });
+                        setFirebaseError({ title: "Acesso ao Kanban/KB/Checklists/Avisos Bloqueado", message: "Adicione as regras das novas coleções no seu Console Firebase (Firestore > Regras).", code: `match /kanban_cards/{doc=**} {\n  allow read, write: if request.auth != null;\n}\nmatch /kb_cards/{doc=**} {\n  allow read, write: if request.auth != null;\n}\nmatch /checklists/{doc=**} {\n  allow read, write: if request.auth != null;\n}\nmatch /avisos/{doc=**} {\n  allow read, write: if request.auth != null;\n}\nmatch /cameras/{doc=**} {\n  allow read, write: if request.auth != null;\n}` });
                     }
                 });
 
@@ -1477,7 +1521,7 @@
                     safeSetState(setChecklists, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
                 }, (error) => { if (error.code === 'permission-denied') safeSetState(setChecklists, []); });
 
-                return () => { isMounted = false; unsubEq(); unsubAcc(); unsubKanban(); unsubKb(); unsubChecklists(); };
+                return () => { isMounted = false; unsubEq(); unsubAcc(); unsubCameras(); unsubKanban(); unsubKb(); unsubChecklists(); };
             }, [isAdmin, user]);
 
             const playSound = (type) => {
@@ -1691,6 +1735,41 @@
             useEffect(() => {
                 setAccDisplayLimit(20);
             }, [inventoryTab, accViewMode, accTypeFilter, accUnitFilter, accSearchTerm]);
+
+            const isCameraVerifiedToday = (camera) => {
+                if (!camera || !camera.lastVerifiedAt) return false;
+                try {
+                    const last = camera.lastVerifiedAt?.toDate ? camera.lastVerifiedAt.toDate() : new Date(camera.lastVerifiedAt);
+                    if (isNaN(last.getTime())) return false;
+                    const now = new Date();
+                    return last.getDate() === now.getDate() &&
+                           last.getMonth() === now.getMonth() &&
+                           last.getFullYear() === now.getFullYear();
+                } catch(e) {
+                    return false;
+                }
+            };
+
+            const filteredCameras = useMemo(() => cameras.filter(cam => {
+                const matchUnit = camUnitFilter === 'Todas' || cam.unit === camUnitFilter;
+                const isVerified = isCameraVerifiedToday(cam);
+                let matchStatus = true;
+                if (camStatusFilter === 'verified_today') matchStatus = isVerified;
+                else if (camStatusFilter === 'pending_today') matchStatus = !isVerified;
+                else if (camStatusFilter === 'problem') matchStatus = (cam.status === 'Com Problema' || cam.hasProblem === true);
+
+                const term = (camSearchTerm || '').toLowerCase().trim();
+                const matchSearch = !term ||
+                    (cam.name && cam.name.toLowerCase().includes(term)) ||
+                    (cam.model && cam.model.toLowerCase().includes(term)) ||
+                    (cam.serialNumber && cam.serialNumber.toLowerCase().includes(term)) ||
+                    (cam.unit && cam.unit.toLowerCase().includes(term)) ||
+                    (cam.app && cam.app.toLowerCase().includes(term)) ||
+                    (cam.notes && cam.notes.toLowerCase().includes(term)) ||
+                    (cam.status && cam.status.toLowerCase().includes(term));
+
+                return matchUnit && matchStatus && matchSearch;
+            }), [cameras, camUnitFilter, camStatusFilter, camSearchTerm]);
 
             const filteredMovements = useMemo(() => {
                 let moves = [];
@@ -2003,6 +2082,83 @@
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
             };
 
+            const handleDownloadSampleCamCsv = () => {
+                const headers = ["Nome", "Modelo", "Unidade", "Nº Série", "Aplicativo", "Status (Normal/Com Problema/Em Manutenção/Offline)", "Observações"];
+                const sampleRow = ["Câmera Portão", "Intelbras VIP 1230", "Matriz", "SN123456", "ISIC Lite", "Normal", "Verificar fiação mensalmente"];
+                const csvRows = [headers.join(";"), sampleRow.join(";")];
+                const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", `modelo_importacao_cameras.csv`);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            };
+
+            const handleImportCamCsv = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setIsSubmitting(true);
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    try {
+                        const text = event.target.result;
+                        const lines = text.split('\n').filter(line => line.trim() !== '');
+                        if (lines.length < 2) { showToast("CSV vazio ou inválido.", "error"); setIsSubmitting(false); return; }
+                        const parseCSVRow = (str) => { let res = []; let inQ = false; let cur = ''; for(let i=0; i<str.length; i++) { let c = str[i]; if(c === '"' && str[i+1] === '"') { cur += '"'; i++; } else if(c === '"') { inQ = !inQ; } else if(c === ';' && !inQ) { res.push(cur); cur = ''; } else { cur += c; } } res.push(cur); return res; };
+                        const headers = parseCSVRow(lines[0].trim());
+                        let createdCount = 0;
+                        let updatedCount = 0;
+                        for (let i = 1; i < lines.length; i++) {
+                            const row = parseCSVRow(lines[i].trim());
+                            if (row.length < Math.min(headers.length, 2)) continue;
+                            const camData = {
+                                name: (row[0] || '').trim(),
+                                model: (row[1] || '').trim(),
+                                unit: (row[2] || '').trim(),
+                                serialNumber: (row[3] || '').trim(),
+                                app: (row[4] || '').trim(),
+                                status: (row[5] || 'Normal').trim(),
+                                notes: (row[6] || '').trim()
+                            };
+                            if (!camData.name) continue;
+                            
+                            camData.hasProblem = (camData.status === 'Com Problema');
+
+                            const existingCam = cameras.find(item => {
+                                const matchSerial = camData.serialNumber && item.serialNumber && item.serialNumber.trim().toLowerCase() === camData.serialNumber.toLowerCase();
+                                const matchName = camData.name && item.name && item.name.trim().toLowerCase() === camData.name.toLowerCase();
+                                return matchSerial || matchName;
+                            });
+
+                            if (existingCam) {
+                                await updateDoc(doc(db, 'cameras', existingCam.id), {
+                                    ...camData,
+                                    updatedAt: serverTimestamp()
+                                });
+                                updatedCount++;
+                            } else {
+                                await addDoc(collection(db, 'cameras'), {
+                                    ...camData,
+                                    createdAt: serverTimestamp(),
+                                    updatedAt: serverTimestamp()
+                                });
+                                createdCount++;
+                            }
+                        }
+
+                        let msg = "";
+                        if (createdCount > 0 && updatedCount > 0) {
+                            msg = `${createdCount} nova(s) cadastrada(s) e ${updatedCount} atualizada(s)!`;
+                        } else if (updatedCount > 0) {
+                            msg = `${updatedCount} câmera(s) atualizada(s) com sucesso!`;
+                        } else {
+                            msg = `${createdCount} câmera(s) importada(s)!`;
+                        }
+                        showToast(msg, "success");
+                        setIsImportCamModalOpen(false);
+                    } catch (err) { showToast("Erro ao processar CSV.", "error"); } finally { setIsSubmitting(false); e.target.value = ''; }
+                };
+                reader.readAsText(file);
+            };
+
             const handleImportAccCsv = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -2097,6 +2253,145 @@
                     await updateDoc(doc(db, 'acessorios', accessory.id), { quantity: newQty, updatedAt: serverTimestamp(), history: arrayUnion({ date: new Date().toISOString(), user: techName, action: logAction }) });
                     showToast("Movimentação registrada!", "success"); setAccMoveModal(null); setAccMoveForm({ action: 'out', quantity: 1, unit: '', department: '', notes: '' });
                 } catch (err) { showToast("Erro ao movimentar acessório", "error"); } finally { setIsSubmitting(false); }
+            };
+
+            const handleSaveCamera = async (e) => {
+                e.preventDefault();
+                if (!camForm.name.trim()) { showToast("Preencha o nome da câmera.", "warning"); return; }
+                setIsSubmitting(true);
+                try {
+                    const data = {
+                        name: camForm.name.trim(),
+                        model: camForm.model.trim(),
+                        unit: camForm.unit.trim(),
+                        serialNumber: camForm.serialNumber.trim(),
+                        app: camForm.app.trim(),
+                        status: camForm.status || 'Normal',
+                        hasProblem: camForm.status === 'Com Problema',
+                        notes: camForm.notes.trim()
+                    };
+                    if (editingCamId) {
+                        await updateDoc(doc(db, 'cameras', editingCamId), { ...data, updatedAt: serverTimestamp() });
+                        showToast("Câmera atualizada com sucesso!", "success");
+                    } else {
+                        await addDoc(collection(db, 'cameras'), {
+                            ...data,
+                            lastVerifiedAt: null,
+                            lastVerifiedBy: null,
+                            previousVerifiedAt: null,
+                            previousVerifiedBy: null,
+                            createdAt: serverTimestamp(),
+                            updatedAt: serverTimestamp()
+                        });
+                        showToast("Câmera cadastrada com sucesso!", "success");
+                    }
+                    setIsCamModalOpen(false);
+                    setEditingCamId(null);
+                    setCamForm({ name: '', model: '', unit: '', serialNumber: '', app: '', status: 'Normal', hasProblem: false, notes: '' });
+                } catch(err) {
+                    showToast("Erro ao salvar câmera.", "error");
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
+            const handleEditCamera = (cam) => {
+                setCamForm({
+                    name: cam.name || '',
+                    model: cam.model || '',
+                    unit: cam.unit || '',
+                    serialNumber: cam.serialNumber || '',
+                    app: cam.app || '',
+                    status: cam.status || (cam.hasProblem ? 'Com Problema' : 'Normal'),
+                    hasProblem: !!cam.hasProblem || cam.status === 'Com Problema',
+                    notes: cam.notes || ''
+                });
+                setEditingCamId(cam.id);
+                setIsCamModalOpen(true);
+            };
+
+            const handleDeleteCamera = (cam) => {
+                setConfirmationModal({
+                    message: `Deseja realmente excluir permanentemente a câmera "${cam.name}"?`,
+                    onConfirm: async () => {
+                        try {
+                            await deleteDoc(doc(db, 'cameras', cam.id));
+                            showToast("Câmera excluída com sucesso.", "success");
+                        } catch(e) {
+                            showToast("Erro ao excluir câmera.", "error");
+                        }
+                    }
+                });
+            };
+
+            const handleToggleCameraVerification = async (cam, e) => {
+                if (e) e.stopPropagation();
+                const isVerified = isCameraVerifiedToday(cam);
+                try {
+                    if (isVerified) {
+                        await updateDoc(doc(db, 'cameras', cam.id), {
+                            lastVerifiedAt: cam.previousVerifiedAt || null,
+                            lastVerifiedBy: cam.previousVerifiedBy || null,
+                            updatedAt: serverTimestamp()
+                        });
+                        playSound('click');
+                        showToast("Verificação diária desmarcada.", "info");
+                    } else {
+                        const nowIso = new Date().toISOString();
+                        await updateDoc(doc(db, 'cameras', cam.id), {
+                            previousVerifiedAt: cam.lastVerifiedAt || null,
+                            previousVerifiedBy: cam.lastVerifiedBy || null,
+                            lastVerifiedAt: nowIso,
+                            lastVerifiedBy: techName || user?.email || 'TI',
+                            updatedAt: serverTimestamp()
+                        });
+                        playSound('update');
+                        showToast("Câmera verificada com sucesso!", "success");
+                    }
+                } catch(err) {
+                    showToast("Erro ao atualizar verificação da câmera.", "error");
+                }
+            };
+
+            const handleToggleCameraProblem = async (cam, e) => {
+                if (e) e.stopPropagation();
+                const isProblem = cam.status === 'Com Problema' || cam.hasProblem;
+                const newStatus = isProblem ? 'Normal' : 'Com Problema';
+                try {
+                    await updateDoc(doc(db, 'cameras', cam.id), {
+                        status: newStatus,
+                        hasProblem: !isProblem,
+                        updatedAt: serverTimestamp()
+                    });
+                    showToast(`Status da câmera alterado para "${newStatus}".`, "info");
+                } catch(err) {
+                    showToast("Erro ao alterar status da câmera.", "error");
+                }
+            };
+
+            const handleExportCamCsv = () => {
+                if (filteredCameras.length === 0) { showToast("Nenhuma câmera para exportar.", "warning"); return; }
+                const headers = ["Nome", "Modelo", "Unidade", "Nº Série/ID", "Aplicativo", "Funcionamento", "Verificada Hoje", "Última Verificação", "Responsável", "Observações"];
+                const csvRows = [headers.join(";")];
+                filteredCameras.forEach(cam => {
+                    const row = [
+                        cam.name || "",
+                        cam.model || "",
+                        cam.unit || "",
+                        cam.serialNumber || "",
+                        cam.app || "",
+                        cam.status || "Normal",
+                        isCameraVerifiedToday(cam) ? "Sim" : "Não",
+                        cam.lastVerifiedAt ? formatTimestamp(cam.lastVerifiedAt) : "Nunca",
+                        cam.lastVerifiedBy || "",
+                        cam.notes || ""
+                    ].map(sanitizeCsvCell);
+                    csvRows.push(row.join(";"));
+                });
+                const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", `cameras_${new Date().toISOString().split('T')[0]}.csv`);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
             };
 
             const isTaskDue = (task) => {
@@ -2284,9 +2579,123 @@
                             </div>
                         </div>
                     )}
+
+                    {isImportCamModalOpen && (
+                        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md border dark:border-slate-800 overflow-hidden">
+                                <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                                    <h3 className="text-lg font-bold dark:text-white flex items-center gap-2"><ArrowUpCircle size={20} className="text-blue-600"/> Importar Câmeras via CSV</h3>
+                                    <button onClick={() => setIsImportCamModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors"><X size={20}/></button>
+                                </div>
+                                <div className="p-6 space-y-6">
+                                    <p className="text-sm text-slate-600 dark:text-slate-300 font-medium">Para realizar o cadastro em massa, é necessário que o seu arquivo siga exatamente o padrão de colunas suportado pelo sistema.</p>
+                                    
+                                    <div className="bg-blue-50 dark:bg-blue-900/10 p-5 rounded-2xl border border-blue-100 dark:border-blue-900/30 flex flex-col items-start gap-3">
+                                        <div>
+                                            <p className="text-sm font-bold text-blue-800 dark:text-blue-300 mb-1">1. Baixe o modelo</p>
+                                            <p className="text-xs text-blue-600/80 dark:text-blue-400/80 mb-3">Baixe a planilha de exemplo e preencha-a com os dados das suas câmeras sem alterar as colunas superiores.</p>
+                                        </div>
+                                        <button onClick={handleDownloadSampleCamCsv} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"><Download size={16} /> Baixar Modelo CSV</button>
+                                    </div>
+
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-start gap-3">
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">2. Envie o arquivo</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">Após preencher e salvar o seu Excel como "CSV (separado por vírgulas)" (que no Brasil usa ponto e vírgula), envie-o abaixo.</p>
+                                        </div>
+                                        <input type="file" accept=".csv" className="hidden" ref={camCsvInputRef} onChange={handleImportCamCsv} />
+                                        <button onClick={() => camCsvInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 border border-slate-700"><ArrowUpCircle size={16} /> {isSubmitting ? 'Processando...' : 'Selecionar e Importar CSV'}</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {isEqModalOpen && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200 overflow-y-auto"><div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-2xl border dark:border-slate-800 my-8"><div className="p-6 border-b dark:border-slate-800 flex justify-between items-center"><h3 className="text-xl font-bold dark:text-white flex items-center gap-2"><Monitor size={24} className="text-blue-600"/> {editingEqId ? 'Editar Equipamento' : 'Cadastro de Equipamento'}</h3><button onClick={() => setIsEqModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors"><X size={24}/></button></div><div className="p-6"><form onSubmit={handleSaveEquipment} className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Tipo de Equipamento</label><div className="relative" ref={eqTypeMenuRef}><button type="button" onClick={() => setIsEqTypeMenuOpen(!isEqTypeMenuOpen)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm font-medium flex items-center justify-between outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><span className="truncate">{eqForm.type}</span><ChevronDown size={18} className={`flex-shrink-0 transition-transform ${isEqTypeMenuOpen ? 'rotate-180' : ''}`} /></button>{isEqTypeMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 custom-scrollbar max-h-48 overflow-y-auto">{EQUIPMENT_TYPES.map(t => (<button key={t} type="button" onClick={() => { setEqForm({...eqForm, type: t}); setIsEqTypeMenuOpen(false); }} className="w-full px-4 py-2 text-left text-sm font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{t} {eqForm.type === t && <Check size={14} className="text-blue-600" />}</button>))}</div>)}</div></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">ID do Dispositivo (IMEI/MAC)</label><input type="text" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" placeholder="Ex: 00:1A:2B:3C:4D / 1234567890" value={eqForm.deviceId} onChange={(e) => setEqForm({...eqForm, deviceId: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Número de Série</label><input type="text" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" placeholder="Ex: S/N 12345ABC" value={eqForm.serialNumber} onChange={(e) => setEqForm({...eqForm, serialNumber: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Modelo / Marca</label><input required type="text" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" placeholder="Ex: Dell Inspiron 15" value={eqForm.model} onChange={(e) => setEqForm({...eqForm, model: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Especificações Técnicas</label><input type="text" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" placeholder="Ex: i5, 16GB RAM, 512GB SSD" value={eqForm.specs} onChange={(e) => setEqForm({...eqForm, specs: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Data de Aquisição</label><input type="text" maxLength={10} placeholder="DD/MM/AAAA" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" value={eqForm.acquisitionDate} onChange={(e) => { let val = e.target.value.replace(/\D/g, ''); if (val.length > 8) val = val.substring(0, 8); if (val.length > 4) { val = val.replace(/(\d{2})(\d{2})(\d{1,4})/, '$1/$2/$3'); } else if (val.length > 2) { val = val.replace(/(\d{2})(\d{1,2})/, '$1/$2'); } setEqForm({...eqForm, acquisitionDate: val}); }} /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Data de Garantia</label><input type="text" maxLength={10} placeholder="DD/MM/AAAA" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" value={eqForm.warrantyDate} onChange={(e) => { let val = e.target.value.replace(/\D/g, ''); if (val.length > 8) val = val.substring(0, 8); if (val.length > 4) { val = val.replace(/(\d{2})(\d{2})(\d{1,4})/, '$1/$2/$3'); } else if (val.length > 2) { val = val.replace(/(\d{2})(\d{1,2})/, '$1/$2'); } setEqForm({...eqForm, warrantyDate: val}); }} /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Preço (R$)</label><input type="text" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" placeholder="R$ 0,00" value={eqForm.price ? parseFloat(eqForm.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''} onChange={(e) => { let val = e.target.value.replace(/\D/g, ''); if (!val) { setEqForm({...eqForm, price: ''}); } else { setEqForm({...eqForm, price: (parseInt(val, 10) / 100).toString()}); } }} /></div></div><div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-900/30 space-y-4 mt-4"><p className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2">Atribuição e Localização (Opcional)</p><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Unidade</label><input type="text" className="w-full px-4 py-3 bg-white dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium shadow-sm" placeholder="Ex: Bonway" value={eqForm.unit} onChange={(e) => setEqForm({...eqForm, unit: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Setor</label><input type="text" className="w-full px-4 py-3 bg-white dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium shadow-sm" placeholder="Ex: Comercial" value={eqForm.department} onChange={(e) => setEqForm({...eqForm, department: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Operador</label><input type="text" className="w-full px-4 py-3 bg-white dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium shadow-sm" placeholder="Ex: João Silva" value={eqForm.operator} onChange={(e) => setEqForm({...eqForm, operator: e.target.value})} /></div><div className="flex gap-4"><div className="flex-1 space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Endereço IP</label><input type="text" className="w-full px-4 py-3 bg-white dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium shadow-sm font-mono" placeholder="Ex: 192.168.1.100" value={eqForm.ipAddress} onChange={(e) => setEqForm({...eqForm, ipAddress: e.target.value})} /></div><div className="flex-1 space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">AnyDesk ID</label><input type="text" className="w-full px-4 py-3 bg-white dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium shadow-sm font-mono" placeholder="Ex: 123456789" value={eqForm.anydeskId} onChange={(e) => setEqForm({...eqForm, anydeskId: e.target.value.replace(/\D/g, '')})} /></div></div></div></div>{eqForm.status !== 'baixado' && (<div className="space-y-2 mt-2"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Status Atual</label><div className="flex gap-2"><button type="button" onClick={() => setEqForm({...eqForm, status: 'guardado'})} className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${eqForm.status === 'guardado' ? 'bg-slate-800 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-500 hover:bg-slate-100'}`}>Guardado / Estoque</button><button type="button" onClick={() => setEqForm({...eqForm, status: 'em_uso'})} className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${eqForm.status === 'em_uso' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-500 hover:bg-slate-100'}`}>Em Uso</button></div></div>)}<div className="pt-4 flex justify-end gap-3"><button type="button" onClick={() => setIsEqModalOpen(false)} className="px-6 py-3 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancelar</button><button type="submit" disabled={isSubmitting} className="px-6 py-3 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all disabled:opacity-50">{editingEqId ? 'Salvar Alterações' : 'Salvar Equipamento'}</button></div></form></div></div></div>)}
 
                     {isAccModalOpen && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"><div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md border dark:border-slate-800"><div className="p-6 border-b dark:border-slate-800 flex justify-between items-center"><h3 className="text-lg font-bold dark:text-white flex items-center gap-2"><Keyboard size={20} className="text-blue-600"/> {editingAccId ? 'Editar Acessório' : 'Cadastrar Novo Acessório'}</h3><button onClick={() => { setIsAccModalOpen(false); setEditingAccId(null); setAccForm({ type: 'Mouse', name: '', initialQuantity: 1, unit: '' }); }} className="text-slate-400 hover:text-red-500 transition-colors"><X size={20}/></button></div><div className="p-6"><form onSubmit={handleSaveAccessory} className="space-y-4"><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Tipo de Acessório</label><div className="relative" ref={accTypeMenuRef}><button type="button" onClick={() => setIsAccTypeMenuOpen(!isAccTypeMenuOpen)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm font-medium flex items-center justify-between outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><span className="truncate">{accForm.type}</span><ChevronDown size={18} className={`flex-shrink-0 transition-transform ${isAccTypeMenuOpen ? 'rotate-180' : ''}`} /></button>{isAccTypeMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 custom-scrollbar max-h-48 overflow-y-auto">{ACCESSORY_TYPES.map(t => (<button key={t} type="button" onClick={() => { setAccForm({...accForm, type: t}); setIsAccTypeMenuOpen(false); }} className="w-full px-4 py-2 text-left text-sm font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{t} {accForm.type === t && <Check size={14} className="text-blue-600" />}</button>))}</div>)}</div></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Descrição / Modelo</label><input required type="text" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" placeholder="Ex: Mouse sem fio Logitech" value={accForm.name} onChange={(e) => setAccForm({...accForm, name: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">{editingAccId ? 'Quantidade em Estoque' : 'Quantidade Inicial em Estoque'}</label><input required type="number" min="0" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" value={accForm.initialQuantity} onChange={(e) => setAccForm({...accForm, initialQuantity: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Unidade / Localização</label><div className="relative" ref={accUnitMenuRef}><button type="button" onClick={() => setIsAccUnitMenuOpen(!isAccUnitMenuOpen)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm font-medium flex items-center justify-between outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><span className={`truncate ${!accForm.unit ? 'text-slate-400' : ''}`}>{accForm.unit || 'Selecione uma unidade...'}</span><ChevronDown size={18} className={`flex-shrink-0 transition-transform ${isAccUnitMenuOpen ? 'rotate-180' : ''}`} /></button>{isAccUnitMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 custom-scrollbar max-h-48 overflow-y-auto"><button type="button" onClick={() => { setAccForm({...accForm, unit: ''}); setIsAccUnitMenuOpen(false); }} className="w-full px-4 py-2 text-left text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-400 text-slate-500 italic flex items-center justify-between">Nenhuma / Uso Geral {accForm.unit === '' && <Check size={14} className="text-blue-600" />}</button><div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />{UNIT_QUICK_FILTERS.map(u => (<button key={u} type="button" onClick={() => { setAccForm({...accForm, unit: u}); setIsAccUnitMenuOpen(false); }} className="w-full px-4 py-2 text-left text-sm font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{u} {accForm.unit === u && <Check size={14} className="text-blue-600" />}</button>))}</div>)}</div></div><div className="pt-4 flex justify-end gap-3"><button type="button" onClick={() => { setIsAccModalOpen(false); setEditingAccId(null); setAccForm({ type: 'Mouse', name: '', initialQuantity: 1, unit: '' }); }} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancelar</button><button type="submit" disabled={isSubmitting} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all disabled:opacity-50">{editingAccId ? 'Salvar Alterações' : 'Cadastrar'}</button></div></form></div></div></div>)}
+
+                    {isCamModalOpen && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 animate-in fade-in duration-200 overflow-y-auto">
+                            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg border dark:border-slate-800 overflow-hidden my-6">
+                                <div className="p-4 sm:p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                                    <h3 className="text-lg font-bold dark:text-white flex items-center gap-2">
+                                        <Camera size={20} className="text-blue-600" />
+                                        {editingCamId ? 'Editar Câmera' : 'Cadastrar Nova Câmera'}
+                                    </h3>
+                                    <button onClick={() => { setIsCamModalOpen(false); setEditingCamId(null); setCamForm({ name: '', model: '', unit: '', serialNumber: '', app: '', status: 'Normal', hasProblem: false, notes: '' }); }} className="text-slate-400 hover:text-red-500 transition-colors p-1.5 rounded-xl">
+                                        <X size={20} />
+                                    </button>
+                                </div>
+                                <div className="p-4 sm:p-6">
+                                    <form onSubmit={handleSaveCamera} className="space-y-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Nome da Câmera</label>
+                                            <input required type="text" onFocus={() => setIsCamUnitMenuOpen(false)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" placeholder="Ex: Câmera Portaria Principal" value={camForm.name} onChange={(e) => setCamForm({...camForm, name: e.target.value})} />
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Modelo</label>
+                                                <input required type="text" onFocus={() => setIsCamUnitMenuOpen(false)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" placeholder="Ex: Intelbras VIP 1130 B" value={camForm.model} onChange={(e) => setCamForm({...camForm, model: e.target.value})} />
+                                            </div>
+
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Unidade</label>
+                                                <div className="relative" ref={camUnitMenuRef}>
+                                                    <button type="button" onClick={() => setIsCamUnitMenuOpen(!isCamUnitMenuOpen)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm font-medium flex items-center justify-between outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white">
+                                                        <span className={`truncate ${!camForm.unit ? 'text-slate-400' : ''}`}>{camForm.unit || 'Selecione uma unidade...'}</span>
+                                                        <ChevronDown size={18} className={`flex-shrink-0 transition-transform ${isCamUnitMenuOpen ? 'rotate-180' : ''}`} />
+                                                    </button>
+                                                    {isCamUnitMenuOpen && (
+                                                        <div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 custom-scrollbar max-h-48 overflow-y-auto">
+                                                            <button type="button" onClick={() => { setCamForm({...camForm, unit: ''}); setIsCamUnitMenuOpen(false); }} className="w-full px-4 py-2 text-left text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-400 text-slate-500 italic flex items-center justify-between">Nenhuma / Uso Geral {camForm.unit === '' && <Check size={14} className="text-blue-600" />}</button>
+                                                            <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
+                                                            {UNIT_QUICK_FILTERS.map(u => (
+                                                                <button key={u} type="button" onClick={() => { setCamForm({...camForm, unit: u}); setIsCamUnitMenuOpen(false); }} className="w-full px-4 py-2 text-left text-sm font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{u} {camForm.unit === u && <Check size={14} className="text-blue-600" />}</button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Nº de Série / ID</label>
+                                                <input type="text" onFocus={() => setIsCamUnitMenuOpen(false)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" placeholder="Ex: SN123456 / CAM-01" value={camForm.serialNumber} onChange={(e) => setCamForm({...camForm, serialNumber: e.target.value})} />
+                                            </div>
+
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Aplicativo</label>
+                                                <input type="text" onFocus={() => setIsCamUnitMenuOpen(false)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" placeholder="Ex: SIM Next, Hik-Connect" value={camForm.app} onChange={(e) => setCamForm({...camForm, app: e.target.value})} />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Funcionamento</label>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                {['Normal', 'Com Problema', 'Em Manutenção', 'Offline'].map(st => (
+                                                    <button key={st} type="button" onClick={() => { setIsCamUnitMenuOpen(false); setCamForm({...camForm, status: st, hasProblem: st === 'Com Problema'}); }} className={`py-2 px-2 rounded-xl text-xs font-bold transition-all ${camForm.status === st ? (st === 'Normal' ? 'bg-green-600 text-white shadow-sm' : st === 'Com Problema' ? 'bg-red-600 text-white shadow-sm' : st === 'Em Manutenção' ? 'bg-orange-500 text-white shadow-sm' : 'bg-slate-700 text-white shadow-sm') : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'}`}>
+                                                        {st}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Observações</label>
+                                            <textarea onFocus={() => setIsCamUnitMenuOpen(false)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium resize-none h-24 custom-scrollbar" placeholder="Porta do switch, IP, localização física, instruções de acesso..." value={camForm.notes} onChange={(e) => setCamForm({...camForm, notes: e.target.value})} />
+                                        </div>
+
+                                        <div className="pt-4 flex justify-end gap-3">
+                                            <button type="button" onClick={() => { setIsCamModalOpen(false); setEditingCamId(null); setCamForm({ name: '', model: '', unit: '', serialNumber: '', app: '', status: 'Normal', hasProblem: false, notes: '' }); }} className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
+                                            <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all disabled:opacity-50">{editingCamId ? 'Salvar Alterações' : 'Cadastrar Câmera'}</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {accMoveModal && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"><div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md border dark:border-slate-800 overflow-hidden"><div className="p-6 border-b dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center"><div><h3 className="text-lg font-bold dark:text-white flex items-center gap-2"><ArrowLeftRight size={20} className="text-blue-600"/> Movimentar Estoque</h3><p className="text-xs text-slate-500 mt-1 font-medium">{accessories.find(a => a.id === accMoveModal)?.name || 'Acessório'}</p></div><button onClick={() => {setAccMoveModal(null); setAccMoveForm({ action: 'out', quantity: 1, unit: '', department: '', notes: '' });}} className="text-slate-400 hover:text-red-500 transition-colors"><X size={20}/></button></div><div className="p-6"><form onSubmit={handleMoveAccessory} className="space-y-4"><div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl"><button type="button" onClick={() => setAccMoveForm({...accMoveForm, action: 'in'})} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${accMoveForm.action === 'in' ? 'bg-white dark:bg-slate-700 text-green-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}><Plus size={14} /> Entrada (+)</button><button type="button" onClick={() => setAccMoveForm({...accMoveForm, action: 'out'})} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${accMoveForm.action === 'out' ? 'bg-white dark:bg-slate-700 text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}><Minus size={14} /> Saída (-)</button></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Quantidade</label><input required type="number" min="1" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-lg outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-black text-center" value={accMoveForm.quantity} onChange={(e) => setAccMoveForm({...accMoveForm, quantity: e.target.value})} /></div>{accMoveForm.action === 'out' && (<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2"><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Destino (Unidade)</label><input required type="text" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" placeholder="Ex: Everest" value={accMoveForm.unit} onChange={(e) => setAccMoveForm({...accMoveForm, unit: e.target.value})} /></div><div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Destino (Setor)</label><input required type="text" className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" placeholder="Ex: RH" value={accMoveForm.department} onChange={(e) => setAccMoveForm({...accMoveForm, department: e.target.value})} /></div></div>)}<div className="space-y-1"><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Observações (Opcional)</label><textarea className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium resize-none h-20" placeholder="Motivo da movimentação, para quem foi entregue..." value={accMoveForm.notes} onChange={(e) => setAccMoveForm({...accMoveForm, notes: e.target.value})} /></div><div className="pt-4"><button type="submit" disabled={isSubmitting} className={`w-full py-3.5 rounded-xl font-bold text-sm text-white shadow-lg transition-all disabled:opacity-50 ${accMoveForm.action === 'in' ? 'bg-green-600 hover:bg-green-700 shadow-green-500/20' : 'bg-orange-500 hover:bg-orange-600 shadow-orange-500/20'}`}>Confirmar Movimentação</button></div></form></div></div></div>)}
 
@@ -2511,6 +2920,7 @@
                             <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl w-full md:w-auto overflow-x-auto custom-scrollbar">
                                 <button onClick={() => setInventoryTab('equipments')} className={`flex-1 whitespace-nowrap px-4 md:px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${inventoryTab === 'equipments' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}><Monitor size={16} /> Equipamentos</button>
                                 <button onClick={() => setInventoryTab('accessories')} className={`flex-1 whitespace-nowrap px-4 md:px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${inventoryTab === 'accessories' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}><Keyboard size={16} /> Acessórios</button>
+                                <button onClick={() => setInventoryTab('cameras')} className={`flex-1 whitespace-nowrap px-4 md:px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${inventoryTab === 'cameras' ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}><Camera size={16} /> Câmeras</button>
                                 <button onClick={() => setInventoryTab('decommissioned')} className={`flex-1 whitespace-nowrap px-4 md:px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${inventoryTab === 'decommissioned' ? 'bg-white dark:bg-slate-700 text-red-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}><ArchiveRestore size={16} /> Baixados</button>
                             </div>
                             </div>
@@ -2531,10 +2941,63 @@
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white dark:bg-slate-900 border dark:border-slate-800 p-4 rounded-2xl shadow-sm">
-                                <div className="relative md:col-span-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input type="text" placeholder="Buscar modelo, ID ou operador..." className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" value={eqSearchTerm} onChange={(e) => setEqSearchTerm(e.target.value)} /></div>
-                                <div className="relative" ref={eqFilterMenuRef}><button onClick={() => setIsEqFilterMenuOpen(!isEqFilterMenuOpen)} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><div className="flex items-center gap-2 overflow-hidden"><Filter size={16} className="text-blue-500 flex-shrink-0" /><span className="truncate">{eqTypeFilter === 'Todos' ? 'Tipo' : eqTypeFilter}</span></div><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isEqFilterMenuOpen ? 'rotate-180' : ''}`} /></button>{isEqFilterMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar"><button onClick={() => { setEqTypeFilter('Todos'); setIsEqFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Tipos {eqTypeFilter === 'Todos' && <Check size={12} className="text-blue-600" />}</button><div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />{EQUIPMENT_TYPES.map(t => (<button key={t} onClick={() => { setEqTypeFilter(t); setIsEqFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{t} {eqTypeFilter === t && <Check size={12} className="text-blue-600" />}</button>))}</div>)}</div>
-                                <div className="relative" ref={eqUnitMenuRef}><button onClick={() => setIsEqUnitMenuOpen(!isEqUnitMenuOpen)} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><div className="flex items-center gap-2 overflow-hidden"><Building2 size={16} className="text-blue-500 flex-shrink-0" /><span className="truncate">{eqUnitFilter === 'Todas' ? 'Unidade' : eqUnitFilter}</span></div><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isEqUnitMenuOpen ? 'rotate-180' : ''}`} /></button>{isEqUnitMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar"><button onClick={() => { setEqUnitFilter('Todas'); setIsEqUnitMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todas Unidades {eqUnitFilter === 'Todas' && <Check size={12} className="text-blue-600" />}</button><div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />{UNIT_QUICK_FILTERS.map(u => (<button key={u} onClick={() => { setEqUnitFilter(u); setIsEqUnitMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{u} {eqUnitFilter === u && <Check size={12} className="text-blue-600" />}</button>))}</div>)}</div>
-                                <div className="relative" ref={eqStatusMenuRef}><button onClick={() => setIsEqStatusMenuOpen(!isEqStatusMenuOpen)} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><div className="flex items-center gap-2 overflow-hidden"><CheckCircle size={16} className="text-blue-500 flex-shrink-0" /><span className="truncate">{eqStatusFilter === 'Todos' ? 'Todos os Status' : (eqStatusFilter === 'em_uso' ? 'Em Uso' : 'Guardados')}</span></div><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isEqStatusMenuOpen ? 'rotate-180' : ''}`} /></button>{isEqStatusMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200"><button onClick={() => { setEqStatusFilter('Todos'); setIsEqStatusMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Status {eqStatusFilter === 'Todos' && <Check size={12} className="text-blue-600" />}</button><div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" /><button onClick={() => { setEqStatusFilter('em_uso'); setIsEqStatusMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Apenas Em Uso {eqStatusFilter === 'em_uso' && <Check size={12} className="text-blue-600" />}</button><button onClick={() => { setEqStatusFilter('guardado'); setIsEqStatusMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Apenas Guardados {eqStatusFilter === 'guardado' && <Check size={12} className="text-blue-600" />}</button></div>)}</div>
+                                    <div className="relative md:col-span-1">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                        <input type="text" placeholder="Buscar modelo, ID ou operador..." className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" value={eqSearchTerm} onChange={(e) => setEqSearchTerm(e.target.value)} />
+                                    </div>
+                                    <div className="relative" ref={eqFilterMenuRef}>
+                                        <button onClick={() => { setIsEqFilterMenuOpen(!isEqFilterMenuOpen); setIsEqUnitMenuOpen(false); setIsEqStatusMenuOpen(false); }} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white">
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <Filter size={16} className="text-blue-500 flex-shrink-0" />
+                                                <span className="truncate">{eqTypeFilter === 'Todos' ? 'Tipo' : eqTypeFilter}</span>
+                                            </div>
+                                            <ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isEqFilterMenuOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+                                        {isEqFilterMenuOpen && (
+                                            <div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
+                                                <button onClick={() => { setEqTypeFilter('Todos'); setIsEqFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Tipos {eqTypeFilter === 'Todos' && <Check size={12} className="text-blue-600" />}</button>
+                                                <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
+                                                {EQUIPMENT_TYPES.map(t => (
+                                                    <button key={t} onClick={() => { setEqTypeFilter(t); setIsEqFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{t} {eqTypeFilter === t && <Check size={12} className="text-blue-600" />}</button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="relative" ref={eqUnitMenuRef}>
+                                        <button onClick={() => { setIsEqUnitMenuOpen(!isEqUnitMenuOpen); setIsEqFilterMenuOpen(false); setIsEqStatusMenuOpen(false); }} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white">
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <Building2 size={16} className="text-blue-500 flex-shrink-0" />
+                                                <span className="truncate">{eqUnitFilter === 'Todas' ? 'Unidade' : eqUnitFilter}</span>
+                                            </div>
+                                            <ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isEqUnitMenuOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+                                        {isEqUnitMenuOpen && (
+                                            <div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
+                                                <button onClick={() => { setEqUnitFilter('Todas'); setIsEqUnitMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todas Unidades {eqUnitFilter === 'Todas' && <Check size={12} className="text-blue-600" />}</button>
+                                                <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
+                                                {UNIT_QUICK_FILTERS.map(u => (
+                                                    <button key={u} onClick={() => { setEqUnitFilter(u); setIsEqUnitMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{u} {eqUnitFilter === u && <Check size={12} className="text-blue-600" />}</button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="relative" ref={eqStatusMenuRef}>
+                                        <button onClick={() => { setIsEqStatusMenuOpen(!isEqStatusMenuOpen); setIsEqFilterMenuOpen(false); setIsEqUnitMenuOpen(false); }} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white">
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <CheckCircle size={16} className="text-blue-500 flex-shrink-0" />
+                                                <span className="truncate">{eqStatusFilter === 'Todos' ? 'Todos os Status' : (eqStatusFilter === 'em_uso' ? 'Em Uso' : 'Guardados')}</span>
+                                            </div>
+                                            <ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isEqStatusMenuOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+                                        {isEqStatusMenuOpen && (
+                                            <div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200">
+                                                <button onClick={() => { setEqStatusFilter('Todos'); setIsEqStatusMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Status {eqStatusFilter === 'Todos' && <Check size={12} className="text-blue-600" />}</button>
+                                                <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
+                                                <button onClick={() => { setEqStatusFilter('em_uso'); setIsEqStatusMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Apenas Em Uso {eqStatusFilter === 'em_uso' && <Check size={12} className="text-blue-600" />}</button>
+                                                <button onClick={() => { setEqStatusFilter('guardado'); setIsEqStatusMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Apenas Guardados {eqStatusFilter === 'guardado' && <Check size={12} className="text-blue-600" />}</button>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 gap-4">
@@ -2657,16 +3120,22 @@
                                         <input type="text" placeholder="Buscar acessório (modelo/nome)..." className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" value={accSearchTerm} onChange={(e) => setAccSearchTerm(e.target.value)} />
                                     </div>
                                     <div className="relative w-full md:w-48 lg:w-64" ref={accFilterMenuRef}>
-                                        <button onClick={() => setIsAccFilterMenuOpen(!isAccFilterMenuOpen)} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><div className="flex items-center gap-2 overflow-hidden"><Filter size={16} className="text-blue-500 flex-shrink-0" /><span className="truncate">{accTypeFilter === 'Todos' ? 'Filtrar por Tipo' : accTypeFilter}</span></div><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isAccFilterMenuOpen ? 'rotate-180' : ''}`} /></button>
-                                        {isAccFilterMenuOpen && (<div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar"><button onClick={() => { setAccTypeFilter('Todos'); setIsAccFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Tipos {accTypeFilter === 'Todos' && <Check size={12} className="text-blue-600" />}</button><div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />{ACCESSORY_TYPES.map(t => (<button key={t} onClick={() => { setAccTypeFilter(t); setIsAccFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{t} {accTypeFilter === t && <Check size={12} className="text-blue-600" />}</button>))}</div>)}
+                                        <button onClick={() => { setIsAccFilterMenuOpen(!isAccFilterMenuOpen); setIsAccUnitFilterMenuOpen(false); }} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><div className="flex items-center gap-2 overflow-hidden"><Filter size={16} className="text-blue-500 flex-shrink-0" /><span className="truncate">{accTypeFilter === 'Todos' ? 'Filtrar por Tipo' : accTypeFilter}</span></div><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isAccFilterMenuOpen ? 'rotate-180' : ''}`} /></button>
+                                        {isAccFilterMenuOpen && (
+                                            <div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
+                                                <button onClick={() => { setAccTypeFilter('Todos'); setIsAccFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Tipos {accTypeFilter === 'Todos' && <Check size={12} className="text-blue-600" />}</button>
+                                                <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
+                                                {ACCESSORY_TYPES.map(t => (<button key={t} onClick={() => { setAccTypeFilter(t); setIsAccFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{t} {accTypeFilter === t && <Check size={12} className="text-blue-600" />}</button>))}
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="relative w-full md:w-48 lg:w-64" ref={accUnitFilterMenuRef}>
-                                        <button onClick={() => setIsAccUnitFilterMenuOpen(!isAccUnitFilterMenuOpen)} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><div className="flex items-center gap-2 overflow-hidden"><Building2 size={16} className="text-blue-500 flex-shrink-0" /><span className="truncate">{accUnitFilter === 'Todas' ? 'Filtrar por Unidade' : accUnitFilter}</span></div><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isAccUnitFilterMenuOpen ? 'rotate-180' : ''}`} /></button>
+                                        <button onClick={() => { setIsAccUnitFilterMenuOpen(!isAccUnitFilterMenuOpen); setIsAccFilterMenuOpen(false); }} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white"><div className="flex items-center gap-2 overflow-hidden"><Building2 size={16} className="text-blue-500 flex-shrink-0" /><span className="truncate">{accUnitFilter === 'Todas' ? 'Filtrar por Unidade' : accUnitFilter}</span></div><ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isAccUnitFilterMenuOpen ? 'rotate-180' : ''}`} /></button>
                                         {isAccUnitFilterMenuOpen && (
                                             <div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
                                                 <button onClick={() => { setAccUnitFilter('Todas'); setIsAccUnitFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todas as Unidades {accUnitFilter === 'Todas' && <Check size={12} className="text-blue-600" />}</button>
                                                 <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
-                                                <button onClick={() => { setAccUnitFilter('Nenhuma'); setIsAccUnitFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 italic flex items-center justify-between">Nenhuma / Uso Geral {accUnitFilter === 'Nenhuma' && <Check size={12} className="text-blue-600" />}</button>
+                                                <button onClick={() => { setAccUnitFilter('Nenhuma'); setIsAccUnitFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-800 dark:text-slate-400 text-slate-500 italic flex items-center justify-between">Nenhuma / Uso Geral {accUnitFilter === 'Nenhuma' && <Check size={12} className="text-blue-600" />}</button>
                                                 <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
                                                 {UNIT_QUICK_FILTERS.map(u => (<button key={u} onClick={() => { setAccUnitFilter(u); setIsAccUnitFilterMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{u} {accUnitFilter === u && <Check size={12} className="text-blue-600" />}</button>))}
                                             </div>
@@ -2811,6 +3280,209 @@
                                         </div>
                                     </div>
                                 )}
+                            </div>
+                            )}
+
+                            {inventoryTab === 'cameras' && (
+                            <div className="space-y-4 animate-in slide-in-from-right-4">
+                                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-slate-900 dark:bg-slate-800 p-4 rounded-2xl shadow-sm gap-4">
+                                    <div className="flex flex-wrap gap-4 text-white min-w-max">
+                                        <div className="text-center px-4 border-r border-slate-700">
+                                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Total Câmeras</p>
+                                            <p className="text-2xl font-black">{filteredCameras.length}</p>
+                                        </div>
+                                        <div className="text-center px-4 border-r border-slate-700">
+                                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Verificadas Hoje</p>
+                                            <p className="text-2xl font-black text-green-400">{filteredCameras.filter(isCameraVerifiedToday).length}</p>
+                                        </div>
+                                        <div className="text-center px-4 border-r border-slate-700">
+                                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Pendentes Hoje</p>
+                                            <p className="text-2xl font-black text-orange-400">{filteredCameras.filter(c => !isCameraVerifiedToday(c)).length}</p>
+                                        </div>
+                                        <div className="text-center px-4">
+                                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Com Problema</p>
+                                            <p className="text-2xl font-black text-red-400">{filteredCameras.filter(c => c.status === 'Com Problema' || c.hasProblem).length}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto shrink-0">
+                                        <div className="flex bg-slate-800 p-1 rounded-xl mr-2">
+                                            <button onClick={() => setCamViewMode('grid')} className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${camViewMode === 'grid' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}`} title="Visualização em Grade">
+                                                <LayoutGrid size={16} />
+                                            </button>
+                                            <button onClick={() => setCamViewMode('list')} className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${camViewMode === 'list' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}`} title="Visualização em Lista">
+                                                <List size={16} />
+                                            </button>
+                                        </div>
+                                        <button onClick={handleExportCamCsv} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-700 whitespace-nowrap" title="Baixar planilha com a lista filtrada">
+                                            <Download size={14} /> <span className="hidden lg:inline">Exportar Planilha</span>
+                                        </button>
+                                        <button onClick={() => setIsImportCamModalOpen(true)} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-700 whitespace-nowrap" title="Cadastrar em massa através de planilha">
+                                            <ArrowUpCircle size={14} /> <span className="hidden lg:inline">Importar Planilha</span>
+                                        </button>
+                                        <button onClick={() => { setEditingCamId(null); setCamForm({ name: '', model: '', unit: '', serialNumber: '', app: '', status: 'Normal', hasProblem: false, notes: '' }); setIsCamModalOpen(true); }} className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20 whitespace-nowrap">
+                                            <Plus size={16} /> <span className="hidden sm:inline">Nova Câmera</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white dark:bg-slate-900 border dark:border-slate-800 p-4 rounded-2xl shadow-sm">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                        <input type="text" placeholder="Buscar câmera por nome, modelo, ID, app..." className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 dark:text-white font-medium" value={camSearchTerm} onChange={(e) => setCamSearchTerm(e.target.value)} />
+                                    </div>
+                                    <div className="relative" ref={camFilterUnitMenuRef}>
+                                        <button onClick={() => { setIsCamFilterUnitMenuOpen(!isCamFilterUnitMenuOpen); setIsCamFilterStatusMenuOpen(false); }} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white">
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <Building2 size={16} className="text-blue-500 flex-shrink-0" />
+                                                <span className="truncate">{camUnitFilter === 'Todas' ? 'Unidades' : camUnitFilter}</span>
+                                            </div>
+                                            <ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isCamFilterUnitMenuOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+                                        {isCamFilterUnitMenuOpen && (
+                                            <div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
+                                                <button onClick={() => { setCamUnitFilter('Todas'); setIsCamFilterUnitMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todas Unidades {camUnitFilter === 'Todas' && <Check size={12} className="text-blue-600" />}</button>
+                                                <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
+                                                {UNIT_QUICK_FILTERS.map(u => (
+                                                    <button key={u} onClick={() => { setCamUnitFilter(u); setIsCamFilterUnitMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">{u} {camUnitFilter === u && <Check size={12} className="text-blue-600" />}</button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="relative" ref={camFilterStatusMenuRef}>
+                                        <button onClick={() => { setIsCamFilterStatusMenuOpen(!isCamFilterStatusMenuOpen); setIsCamFilterUnitMenuOpen(false); }} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-xs font-bold flex items-center justify-between gap-2 outline-none focus:ring-2 focus:ring-blue-500 transition-all dark:text-white">
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <CheckCircle size={16} className="text-blue-500 flex-shrink-0" />
+                                                <span className="truncate">{camStatusFilter === 'Todos' ? 'Todos os Status' : camStatusFilter === 'verified_today' ? 'Verificadas Hoje' : camStatusFilter === 'pending_today' ? 'Pendentes Hoje' : 'Com Problema'}</span>
+                                            </div>
+                                            <ChevronDown size={14} className={`transition-transform flex-shrink-0 ${isCamFilterStatusMenuOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+                                        {isCamFilterStatusMenuOpen && (
+                                            <div className="absolute z-50 mt-2 w-full bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200">
+                                                <button onClick={() => { setCamStatusFilter('Todos'); setIsCamFilterStatusMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Todos os Status {camStatusFilter === 'Todos' && <Check size={12} className="text-blue-600" />}</button>
+                                                <div className="h-px bg-slate-100 dark:bg-slate-800 mx-2 my-1" />
+                                                <button onClick={() => { setCamStatusFilter('verified_today'); setIsCamFilterStatusMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Verificadas Hoje {camStatusFilter === 'verified_today' && <Check size={12} className="text-blue-600" />}</button>
+                                                <button onClick={() => { setCamStatusFilter('pending_today'); setIsCamFilterStatusMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Pendentes Hoje {camStatusFilter === 'pending_today' && <Check size={12} className="text-blue-600" />}</button>
+                                                <button onClick={() => { setCamStatusFilter('problem'); setIsCamFilterStatusMenuOpen(false); }} className="w-full px-4 py-2 text-left text-xs font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:text-white flex items-center justify-between">Com Problema {camStatusFilter === 'problem' && <Check size={12} className="text-blue-600" />}</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className={camViewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" : "flex flex-col gap-3"}>
+                                    {filteredCameras.length === 0 ? (
+                                        <div className="col-span-full py-24 text-center border-2 border-dashed rounded-3xl text-slate-400 font-bold border-slate-200 dark:border-slate-800">
+                                            Nenhuma câmera encontrada.
+                                        </div>
+                                    ) : (
+                                        filteredCameras.map(cam => {
+                                            const verifiedToday = isCameraVerifiedToday(cam);
+                                            const hasProblem = cam.status === 'Com Problema' || cam.hasProblem;
+                                            const isMaint = cam.status === 'Em Manutenção';
+                                            const isOffline = cam.status === 'Offline';
+
+                                            return (
+                                                <div key={cam.id} className={`bg-white dark:bg-slate-900 border ${hasProblem ? 'border-red-300 dark:border-red-900/60 shadow-red-500/5' : verifiedToday ? 'border-green-200 dark:border-green-900/40' : 'border-slate-200 dark:border-slate-800'} rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex ${camViewMode === 'list' ? 'flex-col xl:flex-row gap-4 xl:items-center' : 'flex-col justify-between'}`}>
+                                                    <div className={`flex-1 flex flex-col ${camViewMode === 'list' ? 'lg:flex-row lg:items-center gap-4' : ''}`}>
+                                                        <div className={`flex items-start justify-between gap-3 ${camViewMode === 'list' ? 'lg:w-[25%] mb-0 shrink-0' : 'mb-3'}`}>
+                                                            <div className="flex items-center gap-3 min-w-0">
+                                                                <div className={`p-3 rounded-2xl flex-shrink-0 ${hasProblem ? 'bg-red-100 text-red-600 dark:bg-red-900/30' : verifiedToday ? 'bg-green-100 text-green-600 dark:bg-green-900/30' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30'}`}>
+                                                                    <Camera size={22} />
+                                                                </div>
+                                                                <div className="min-w-0 flex flex-col">
+                                                                    <h4 className="text-base font-bold text-slate-900 dark:text-white truncate" title={cam.name}>{cam.name}</h4>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{cam.model || 'Modelo não especificado'}</p>
+                                                                        {cam.unit && camViewMode === 'list' && (
+                                                                            <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded-md uppercase shrink-0">
+                                                                                {cam.unit}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            {cam.unit && camViewMode !== 'list' && (
+                                                                <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1 flex-shrink-0">
+                                                                    <MapPin size={10} /> {cam.unit}
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        <div className={`grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl text-xs ${camViewMode === 'list' ? 'lg:w-[20%] mb-0 shrink-0' : 'mb-4'}`}>
+                                                            <div>
+                                                                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-0.5">Nº Série / ID</span>
+                                                                <span className="font-bold text-slate-700 dark:text-slate-200 truncate block font-mono text-[11px]" title={cam.serialNumber}>{cam.serialNumber || 'N/A'}</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-0.5">Aplicativo</span>
+                                                                <span className="font-bold text-slate-700 dark:text-slate-200 truncate block" title={cam.app}>{cam.app || 'N/A'}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className={`flex items-center justify-between p-3 rounded-2xl border dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 ${camViewMode === 'list' ? 'lg:w-[20%] mb-0 shrink-0 flex-col xl:flex-row gap-2' : 'mb-3'}`}>
+                                                            <div>
+                                                                {camViewMode !== 'list' && <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-0.5">Funcionamento</span>}
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${hasProblem ? 'bg-red-500 animate-pulse' : isMaint ? 'bg-orange-500' : isOffline ? 'bg-slate-400' : 'bg-green-500'}`}></span>
+                                                                    <span className={`text-xs font-black truncate ${hasProblem ? 'text-red-600 dark:text-red-400' : isMaint ? 'text-orange-600 dark:text-orange-400' : isOffline ? 'text-slate-500' : 'text-green-600 dark:text-green-400'}`}>
+                                                                        {cam.status || 'Normal'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <button onClick={(e) => handleToggleCameraProblem(cam, e)} className={`text-[10px] font-bold px-2.5 py-1 rounded-xl transition-all border w-full xl:w-auto text-center ${hasProblem ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/40' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40'}`} title="Alternar status de problema">
+                                                                {hasProblem ? 'Marcar Normal' : 'Relatar Problema'}
+                                                            </button>
+                                                        </div>
+
+                                                        <div className={`p-3.5 rounded-2xl border transition-all ${verifiedToday ? 'bg-green-50/80 dark:bg-green-950/20 border-green-200 dark:border-green-800/60' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/60'} ${camViewMode === 'list' ? 'lg:flex-1 mb-0' : ''}`}>
+                                                            <div className="flex items-center justify-between">
+                                                                <label className="flex items-center gap-2.5 cursor-pointer select-none" onClick={(e) => handleToggleCameraVerification(cam, e)}>
+                                                                    <div className={`w-5 h-5 rounded-lg flex items-center justify-center transition-all ${verifiedToday ? 'bg-green-600 text-white shadow-sm' : 'border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:border-blue-500'}`}>
+                                                                        {verifiedToday && <Check size={14} className="stroke-[3]" />}
+                                                                    </div>
+                                                                    <span className={`text-xs font-black tracking-tight ${verifiedToday ? 'text-green-700 dark:text-green-300' : 'text-slate-600 dark:text-slate-300'}`}>
+                                                                        Verificação Diária
+                                                                    </span>
+                                                                </label>
+                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md whitespace-nowrap ${verifiedToday ? 'bg-green-200/60 dark:bg-green-900/50 text-green-800 dark:text-green-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                                                                    {verifiedToday ? 'Verificada' : 'Pendente'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/40 flex items-center justify-between text-[11px]">
+                                                                <span className="text-slate-400 font-bold uppercase text-[9px]">Última Verificação:</span>
+                                                                <span className="font-bold text-slate-600 dark:text-slate-300 truncate pl-2">
+                                                                    {cam.lastVerifiedAt ? (
+                                                                        <>
+                                                                            {formatTimestamp(cam.lastVerifiedAt).split(' ')[0]}
+                                                                            {cam.lastVerifiedBy && <span className="opacity-70 font-normal"> ({cam.lastVerifiedBy.split(' ')[0]})</span>}
+                                                                        </>
+                                                                    ) : (
+                                                                        <span className="italic text-slate-400">Nunca verificada</span>
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {cam.notes && camViewMode !== 'list' && (
+                                                            <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                                                                <span className="text-[9px] font-black uppercase text-slate-400 block mb-0.5 tracking-wider">Observações</span>
+                                                                <p className="line-clamp-2" title={cam.notes}>{cam.notes}</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <div className={`flex gap-2 ${camViewMode === 'list' ? 'xl:flex-col shrink-0 mt-4 xl:mt-0 pt-3 xl:pt-0 border-t xl:border-t-0 xl:border-l dark:xl:border-slate-800 xl:pl-4 justify-center' : 'mt-4 pt-3 border-t dark:border-slate-800'}`}>
+                                                        <button onClick={() => handleEditCamera(cam)} className={`py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 border dark:border-slate-700/50 ${camViewMode === 'list' ? 'px-4 flex-1 xl:flex-none' : 'flex-1'}`} title="Editar Câmera">
+                                                            <Edit size={14} /> Editar
+                                                        </button>
+                                                        <button onClick={() => handleDeleteCamera(cam)} className="p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-red-500 rounded-xl transition-colors border dark:border-slate-700/50 flex items-center justify-center" title="Excluir Câmera">
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             </div>
                             )}
                         </div>
