@@ -684,7 +684,7 @@
                     return pruned;
                 } catch { return {}; }
             });
-            const [archiveDisplayLimit, setArchiveDisplayLimit] = useState(10);
+            const [archiveDisplayLimit, setArchiveDisplayLimit] = useState(20);
             const [confirmationModal, setConfirmationModal] = useState(null); 
             const [reportFilterMode, setReportFilterMode] = useState('today');
             const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -849,8 +849,18 @@
             const [isCamUnitMenuOpen, setIsCamUnitMenuOpen] = useState(false);
             const [isCamFilterUnitMenuOpen, setIsCamFilterUnitMenuOpen] = useState(false);
             const [isCamFilterStatusMenuOpen, setIsCamFilterStatusMenuOpen] = useState(false);
-            const [camViewMode, setCamViewMode] = useState(() => safeStorage.get('camViewMode', 'grid'));
             const [eqViewMode, setEqViewMode] = useState(() => safeStorage.get('eqViewMode', 'list'));
+            const [ticketViewModes, setTicketViewModes] = useState(() => safeStorage.getJSON('helpdesk_ticket_view_modes', { active: 'grid', others: 'grid', contested: 'grid', archive: 'grid' }));
+            const currentTicketArea = view === 'archive' ? 'archive' : techViewMode;
+            const ticketViewMode = ticketViewModes[currentTicketArea] || 'grid';
+            
+            const handleSetTicketViewMode = (mode) => {
+                const newModes = { ...ticketViewModes, [currentTicketArea]: mode };
+                setTicketViewModes(newModes);
+                safeStorage.setJSON('helpdesk_ticket_view_modes', newModes);
+            };
+
+            const [camViewMode, setCamViewMode] = useState(() => safeStorage.get('camViewMode', 'grid'));
             const [accLayoutMode, setAccLayoutMode] = useState(() => safeStorage.get('accLayoutMode', 'grid'));
             const [accMovementsLayoutMode, setAccMovementsLayoutMode] = useState(() => safeStorage.get('accMovementsLayoutMode', 'list'));
 
@@ -1826,7 +1836,7 @@
             }, [filteredTickets, view, archiveDisplayLimit]);
 
             useEffect(() => {
-                setArchiveDisplayLimit(10);
+                setArchiveDisplayLimit(20);
             }, [view, searchTerm, unitFilter, priorityFilter, typeFilter]);
 
             const activeCount = useMemo(() => tickets.filter(t => t.status !== 'finalizado' && t.status !== 'contestado' && (t.technician === 'Pendente' || t.technician === techName)).length, [tickets, techName]);
@@ -3888,7 +3898,8 @@
                                 </div>
                                 )}
                                 
-                                <div className="flex flex-wrap items-center gap-3">
+                                <div className="flex flex-wrap items-center justify-between gap-3 w-full">
+                                <div className="flex flex-wrap items-center gap-3 flex-1">
                                 {isAdmin ? (
                                     <>
                                     <div className="bg-slate-900 dark:bg-blue-600 text-white px-4 py-2 rounded-2xl flex items-center gap-3 shadow-sm border border-transparent w-fit animate-in slide-in-from-left-4"><UserCheck size={18} className="text-blue-400 dark:text-blue-100" /><div className="leading-tight"><p className="text-[9px] font-black uppercase opacity-60 tracking-widest">Painel TI Ativo</p><p className="font-bold text-xs">{techName}</p></div></div>
@@ -3908,6 +3919,11 @@
                                     </div>
                                     </div>
                                 )}
+                                </div>
+                                <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl shadow-inner shrink-0">
+                                    <button onClick={() => handleSetTicketViewMode('grid')} className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${ticketViewMode === 'grid' ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-white shadow-sm border border-slate-200 dark:border-slate-700' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700/50'}`} title="Visualização em Grade"><LayoutGrid size={16} /></button>
+                                    <button onClick={() => handleSetTicketViewMode('list')} className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${ticketViewMode === 'list' ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-white shadow-sm border border-slate-200 dark:border-slate-700' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700/50'}`} title="Visualização em Lista"><List size={16} /></button>
+                                </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 bg-white dark:bg-slate-900 border dark:border-slate-800 p-4 rounded-2xl shadow-sm">
@@ -3959,14 +3975,54 @@
                                             {isLockedForTech && !isFinalized && (<div className="bg-slate-100 dark:bg-slate-800 px-6 py-2 text-xs font-bold text-slate-500 flex items-center gap-2 border-b dark:border-slate-700"><Lock size={12} /> Chamado em atendimento por: {ticket.technician}</div>)}
                                             {isFinalized && (<div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-2 text-xs font-bold text-slate-400 flex items-center gap-2 border-b dark:border-slate-700"><Lock size={12} /> Chamado finalizado (Modo de Leitura)</div>)}
                                             
-                                            <div className={`p-6 ${isLockedForTech || isFinalized ? 'opacity-75' : ''}`}>
+                                            <div className={`transition-all ${ticketViewMode === 'list' && !isExpanded ? 'p-4' : 'p-6'} ${isLockedForTech || isFinalized ? 'opacity-75' : ''}`}>
+                                                {ticketViewMode === 'list' && !isExpanded ? (
+                                                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                                        <div className="flex items-center gap-4 min-w-0 flex-1">
+                                                            <div className={`shrink-0 p-3 rounded-2xl ${ticket.type === 'request' ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}`}>
+                                                                <TicketTypeIcon size={20} />
+                                                            </div>
+                                                            <div className="min-w-0 pr-4">
+                                                                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                                                    <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border dark:border-slate-700">#{ticket.id.substring(0,6)}</span>
+                                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex items-center gap-1 ${status.color}`}><StatusIcon size={10} /> {status.label}</span>
+                                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex items-center gap-1 ${priority.color}`}><PriorityIcon size={10} /> {priority.label}</span>
+                                                                </div>
+                                                                <h4 className="text-sm font-black dark:text-white truncate" title={ticket.description}>{ticketTitle}: <span className="font-medium text-slate-500 dark:text-slate-400">{ticket.description}</span></h4>
+                                                            </div>
+                                                        </div>
+                                                        <div className="hidden xl:grid grid-cols-4 gap-4 px-4 flex-1">
+                                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><User size={10}/> Solicitante</p><p className="text-xs font-bold dark:text-slate-300 truncate">{formatName(ticket.requester)}</p></div>
+                                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><Building2 size={10}/> Localização</p><p className="text-xs font-bold dark:text-slate-300 truncate">{formatDisplay(ticket.unit)}</p></div>
+                                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><UserPlus size={10}/> Atendimento</p><p className="text-xs font-bold text-blue-600 truncate">{ticket.technician || 'Aguardando'}</p></div>
+                                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><Calendar size={10}/> Abertura</p><p className="text-xs font-bold dark:text-slate-300">{formatTimestamp(ticket.createdAt).split(' ')[0]}</p></div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-2 lg:mt-0 shrink-0">
+                                                            <button onClick={() => { setExpandedChatId(ticket.id); setActiveChatTab('public'); markAsRead(ticket.id, 'public'); }} className="relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700">
+                                                                <MessageSquare size={14}/> Detalhes
+                                                                {hasPublicUnread && !hasInternalUnread && (<div className="absolute -top-1 -right-1 p-1 rounded-full border-2 border-white dark:border-slate-900 bg-blue-600 shadow-md animate-bounce"><Bell size={8} className="text-white fill-current" /></div>)}
+                                                                {!hasPublicUnread && hasInternalUnread && (<div className="absolute -top-1 -right-1 p-1 rounded-full border-2 border-white dark:border-slate-900 bg-orange-500 shadow-md animate-bounce"><Bell size={8} className="text-white fill-current" /></div>)}
+                                                                {hasPublicUnread && hasInternalUnread && (<div className="absolute -top-1 -right-1 flex -space-x-1 animate-bounce"><div className="p-1 rounded-full border-2 border-white dark:border-slate-900 bg-blue-600 shadow-md z-10"><Bell size={6} className="text-white fill-current" /></div><div className="p-1 rounded-full border-2 border-white dark:border-slate-900 bg-orange-500 shadow-md z-0"><Bell size={6} className="text-white fill-current" /></div></div>)}
+                                                            </button>
+                                                            {isAdmin && !isFinalized && (<>{isPending && (<button onClick={() => updateTicketData(ticket.id, { technician: techName, status: 'atendimento' }, `${techName} assumiu o chamado`)} className="p-2 rounded-xl text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40 dark:text-green-400 transition-all" title="Assumir Chamado"><UserPlus size={16}/></button>)}{isLockedForTech && (<button onClick={() => updateTicketData(ticket.id, { technician: techName, status: 'atendimento' }, `${techName} assumiu o chamado que estava com ${ticket.technician}`)} className="p-2 rounded-xl text-purple-700 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 dark:text-purple-400 transition-all" title="Assumir Chamado"><UserPlus size={16}/></button>)}</>)}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <>
                                                 <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-                                                <div className="flex flex-wrap gap-2">
+                                                <div className="flex flex-wrap items-center gap-2">
                                                     <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 ${status.color}`}><StatusIcon size={12} /> {status.label}</span>
                                                     <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 ${priority.color}`}><PriorityIcon size={12} /> {priority.label}</span>
                                                     <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-500">#{ticket.id.substring(0,6)}</span>
                                                 </div>
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Calendar size={12} /> {formatTimestamp(ticket.createdAt)}</p>
+                                                <div className="flex items-center gap-4">
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Calendar size={12} /> {formatTimestamp(ticket.createdAt)}</p>
+                                                    {ticketViewMode === 'list' && isExpanded && (
+                                                        <button onClick={() => { setExpandedChatId(null); setShowHistoryId(null); }} className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors shadow-sm" title="Minimizar Detalhes">
+                                                            <X size={16} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 </div>
                                                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                                                 <div className={`${isAdmin ? 'lg:col-span-8' : 'lg:col-span-12'} space-y-6`}>
@@ -3986,7 +4042,7 @@
                                                     </div>
                                                     <div className="flex flex-wrap gap-2">
                                                     <button onClick={() => { 
-                                                        if (isExpanded) { setExpandedChatId(null); } 
+                                                        if (isExpanded) { setExpandedChatId(null); setShowHistoryId(null); } 
                                                         else { setExpandedChatId(ticket.id); setActiveChatTab('public'); markAsRead(ticket.id, 'public'); }
                                                     }} className={`relative flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all ${isExpanded ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`}>
                                                         <MessageSquare size={16} /> Mensagens
@@ -4017,6 +4073,8 @@
                                                     </div>
                                                 )}
                                                 </div>
+                                                </>
+                                                )}
                                                 {showHistoryId === ticket.id && (
                                                 <div className="mt-8 pt-8 border-t dark:border-slate-800 animate-in slide-in-from-top-4">
                                                     <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2"><History size={14} /> Log de Alterações</h4>
@@ -4079,7 +4137,7 @@
                                     
                                     {view === 'archive' && archiveDisplayLimit < filteredTickets.length && (
                                         <div className="pt-6 pb-2 flex justify-center animate-in fade-in">
-                                            <button onClick={() => setArchiveDisplayLimit(prev => prev + 10)} className="px-6 py-3 rounded-2xl text-xs font-bold bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
+                                            <button onClick={() => setArchiveDisplayLimit(prev => prev + 20)} className="px-6 py-3 rounded-2xl text-xs font-bold bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
                                                 <PlusCircle size={16} /> Carregar Mais Chamados ({filteredTickets.length - archiveDisplayLimit} restantes)
                                             </button>
                                         </div>
