@@ -119,9 +119,9 @@
             CircleCheckBig as CheckCircle2, ChevronUp, LayoutDashboard, LayoutGrid, List, Paperclip as Attachment, Database as Inventory, Kanban as Board, CheckSquare as Checklist, BookOpen as KB, Camera
         } from 'lucide-react';
         import { initializeApp, getApps, getApp } from 'firebase/app';
-        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, arrayUnion, deleteDoc, setDoc } from 'firebase/firestore';
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, arrayUnion, deleteDoc, setDoc, runTransaction } from 'firebase/firestore';
         import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
-        import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+        import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
         import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 
         const customScrollStyles = `
@@ -174,7 +174,15 @@
             { id: 'alta', label: 'Alta', color: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800', icon: AlertCircle },
         ];
 
+        const ADMIN_DOMAIN = 'helpdeskti.com';
+
+        const UNIT_MAP = { "bw": "Bonway", "evt": "Everest", "evs": "EverSky", "ht": "Barueri", "gd": "Good", "perus": "Perus" };
         const UNIT_QUICK_FILTERS = ["Bonway", "Everest", "EverSky", "Perus", "Barueri", "Good"];
+        const normalizeUnitName = (unitName) => {
+            if (!unitName) return "";
+            const lower = unitName.trim().toLowerCase();
+            return UNIT_MAP[lower] || lower.charAt(0).toUpperCase() + lower.slice(1);
+        };
 
         const MOTIVATIONAL_PHRASES = ["A tecnologia move o mundo, e você move a tecnologia.", "Cada problema resolvido é um passo para a excelência.", "Seu trabalho conecta pessoas e soluções.", "Grandes realizações são feitas de pequenos detalhes bem resolvidos.", "Hoje é um ótimo dia para fazer a diferença!", "A persistência é o caminho do êxito.", "Solucionar é simplificar o complexo.", "Sua dedicação transforma desafios em oportunidades."];
 
@@ -199,6 +207,14 @@
             { id: 'review', title: 'Em Revisão', color: 'text-purple-600 dark:text-purple-400 bg-purple-100/50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800' },
             { id: 'done', title: 'Concluído', color: 'text-green-600 dark:text-green-400 bg-green-100/50 dark:bg-green-900/20 border-green-200 dark:border-green-800' }
         ];
+
+        const safeStorage = {
+            get: (key, fallback = null) => { try { const v = localStorage.getItem(key); return v !== null ? v : fallback; } catch { return fallback; } },
+            set: (key, value) => { try { localStorage.setItem(key, value); } catch(e) { console.warn('Storage write failed:', e); } },
+            getJSON: (key, fallback = null) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } },
+            setJSON: (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch(e) { console.warn('Storage write failed:', e); } },
+            remove: (key) => { try { localStorage.removeItem(key); } catch {} }
+        };
 
         const formatName = (name) => {
             if (!name) return "";
@@ -303,7 +319,34 @@
             const [position, setPosition] = useState({ x: 0, y: 0 });
             const startPos = useRef({ x: 0, y: 0 });
 
-            useEffect(() => { if (isOpen) { setZoom(1); setPosition({ x: 0, y: 0 }); } }, [isOpen, currentIndex]);
+            const onCloseRef = useRef(onClose);
+            const onNextRef = useRef(onNext);
+            const onPrevRef = useRef(onPrev);
+            onCloseRef.current = onClose;
+            onNextRef.current = onNext;
+            onPrevRef.current = onPrev;
+
+            // Reset zoom/posição apenas quando a imagem ou o modal muda
+            useEffect(() => {
+                if (isOpen) { setZoom(1); setPosition({ x: 0, y: 0 }); }
+            }, [isOpen, currentIndex]);
+
+            // Keyboard listener + body overflow lock (referências estáveis via ref)
+            useEffect(() => {
+                if (isOpen) {
+                    document.body.style.overflow = 'hidden';
+                    const handleKeyDown = (e) => {
+                        if (e.key === 'Escape') onCloseRef.current();
+                        else if (e.key === 'ArrowRight') onNextRef.current();
+                        else if (e.key === 'ArrowLeft') onPrevRef.current();
+                    };
+                    window.addEventListener('keydown', handleKeyDown);
+                    return () => {
+                        document.body.style.overflow = '';
+                        window.removeEventListener('keydown', handleKeyDown);
+                    };
+                }
+            }, [isOpen]);
 
             if (!isOpen || images.length === 0) return null;
             const currentImage = images[currentIndex];
@@ -313,7 +356,7 @@
             const handleMouseUp = () => setIsDragging(false);
 
             return (
-                <div className="fixed inset-0 z-[80] bg-black/95 backdrop-blur-sm flex flex-col animate-in fade-in duration-200" onClick={onClose}>
+                <div role="dialog" aria-modal="true" aria-label="Visualizador de Imagens" className="fixed inset-0 z-[80] bg-black/95 backdrop-blur-sm flex flex-col animate-in fade-in duration-200" onClick={onClose}>
                 <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-50 bg-gradient-to-b from-black/50 to-transparent" onClick={e => e.stopPropagation()}>
                     <div className="text-white text-sm font-medium bg-black/30 px-3 py-1 rounded-full backdrop-blur-md">{currentIndex + 1} / {images.length}</div>
                     <div className="flex items-center gap-2">
@@ -334,13 +377,28 @@
         };
 
         const DocViewer = ({ doc, onClose }) => {
+            const onCloseRef = useRef(onClose);
+            onCloseRef.current = onClose;
+
+            useEffect(() => {
+                if (doc) {
+                    document.body.style.overflow = 'hidden';
+                    const handleKeyDown = (e) => { if (e.key === 'Escape') onCloseRef.current(); };
+                    window.addEventListener('keydown', handleKeyDown);
+                    return () => {
+                        document.body.style.overflow = '';
+                        window.removeEventListener('keydown', handleKeyDown);
+                    };
+                }
+            }, [doc]);
+
             if (!doc) return null;
             const isImage = (doc.type && doc.type.includes('image')) || /\.(jpg|jpeg|png|webp|gif|svg)(\?.*)?$/i.test(doc.name || doc.url);
             const isPdf = (doc.type && doc.type.includes('pdf')) || /\.(pdf)(\?.*)?$/i.test(doc.name || doc.url);
             const isText = (doc.type && doc.type.includes('text')) || /\.(txt|csv|log|json|md)(\?.*)?$/i.test(doc.name || doc.url);
 
             return (
-                <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-6 animate-in fade-in duration-200" onClick={onClose}>
+                <div role="dialog" aria-modal="true" aria-label="Visualizador de Documentos" className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-6 animate-in fade-in duration-200" onClick={onClose}>
                     <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-5xl max-h-[92vh] border dark:border-slate-800 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
                         <div className="p-4 sm:p-5 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60 rounded-t-3xl">
                             <div className="flex items-center gap-3 min-w-0 pr-4">
@@ -368,7 +426,11 @@
                                     <img src={doc.url} alt={doc.name || 'Anexo'} className="max-h-[75vh] w-auto max-w-full object-contain rounded-2xl shadow-md select-none" />
                                 </div>
                             ) : (
-                                <iframe src={doc.url} title={doc.name || 'Visualizador de Documento'} className="w-full h-[75vh] rounded-2xl border-0 bg-white dark:bg-slate-900 shadow-inner" />
+                                (doc.url && (doc.url.startsWith('https://') || doc.url.startsWith('blob:'))) ? (
+                                    <iframe src={doc.url} sandbox="allow-scripts allow-same-origin" title={doc.name || 'Visualizador de Documento'} className="w-full h-[75vh] rounded-2xl border-0 bg-white dark:bg-slate-900 shadow-inner" />
+                                ) : (
+                                    <p className="text-red-500 text-sm font-bold p-4">URL não suportada para visualização.</p>
+                                )
                             )}
                         </div>
                     </div>
@@ -394,7 +456,7 @@
                 .trim();
         };
 
-        const MarkdownContent = ({ content, className = '' }) => {
+        const MarkdownContent = React.memo(({ content, className = '' }) => {
             if (!content) return null;
 
             const renderInline = (text) => {
@@ -570,19 +632,20 @@
             }
 
             return <div className={`space-y-1.5 ${className}`}>{elements}</div>;
-        };
+        });
 
         function App() {
             const [user, setUser] = useState(null);
-            const [isAdmin, setIsAdmin] = useState(() => { try { return localStorage.getItem('helpdesk_is_admin') === 'true'; } catch { return false; } });
-            const [techName, setTechName] = useState(() => { try { return localStorage.getItem('helpdesk_tech_name') || ''; } catch { return ''; } });
-            const [view, setView] = useState(() => { try { return localStorage.getItem('helpdesk_is_admin') === 'true' ? 'dashboard' : 'landing'; } catch { return 'landing'; } });
+            const [isAdmin, setIsAdmin] = useState(() => safeStorage.get('helpdesk_is_admin') === 'true');
+            const [techName, setTechName] = useState(() => safeStorage.get('helpdesk_tech_name', ''));
+            const [view, setView] = useState(() => safeStorage.get('helpdesk_is_admin') === 'true' ? 'dashboard' : 'landing');
             const [tickets, setTickets] = useState([]);
             const [loading, setLoading] = useState(true);
+            const [isAuthInitializing, setIsAuthInitializing] = useState(true);
             const [isSubmitting, setIsSubmitting] = useState(false);
             const [searchTerm, setSearchTerm] = useState('');
-            const [userSector, setUserSector] = useState(() => { try { return localStorage.getItem('helpdesk_user_sector') || ''; } catch { return ''; } });
-            const [userUnit, setUserUnit] = useState(() => { try { return localStorage.getItem('helpdesk_user_unit') || ''; } catch { return ''; } });
+            const [userSector, setUserSector] = useState(() => safeStorage.get('helpdesk_user_sector', ''));
+            const [userUnit, setUserUnit] = useState(() => safeStorage.get('helpdesk_user_unit', ''));
             const [unitFilter, setUnitFilter] = useState('Todas'); 
             const [priorityFilter, setPriorityFilter] = useState('Todas'); 
             const [typeFilter, setTypeFilter] = useState('Todos'); 
@@ -610,7 +673,17 @@
             const [imageView, setImageView] = useState({ isOpen: false, images: [], currentIndex: 0 });
             const [previewAttachment, setPreviewAttachment] = useState(null);
             const [deferredPrompt, setDeferredPrompt] = useState(null);
-            const [lastReadTimes, setLastReadTimes] = useState(() => { try { const saved = localStorage.getItem('helpdesk_read_times'); return saved ? JSON.parse(saved) : {}; } catch { return {}; } });
+            const [lastReadTimes, setLastReadTimes] = useState(() => {
+                try {
+                    const saved = safeStorage.get('helpdesk_read_times');
+                    if (!saved) return {};
+                    const parsed = JSON.parse(saved);
+                    // Podar entradas com mais de 60 dias
+                    const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+                    const pruned = Object.fromEntries(Object.entries(parsed).filter(([, v]) => v > cutoff));
+                    return pruned;
+                } catch { return {}; }
+            });
             const [archiveDisplayLimit, setArchiveDisplayLimit] = useState(10);
             const [confirmationModal, setConfirmationModal] = useState(null); 
             const [reportFilterMode, setReportFilterMode] = useState('today');
@@ -619,7 +692,7 @@
             const [dailyPhrase, setDailyPhrase] = useState('');
             const [ticketType, setTicketType] = useState('problem'); 
             const [firebaseError, setFirebaseError] = useState(null);
-            const [isDarkMode, setIsDarkMode] = useState(() => { try { return localStorage.getItem('helpdesk_dark_mode') === 'true'; } catch { return false; } });
+            const [isDarkMode, setIsDarkMode] = useState(() => safeStorage.get('helpdesk_dark_mode') === 'true');
             const [isAudioEnabled, setIsAudioEnabled] = useState(true);
             const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -656,15 +729,21 @@
                 
                 window.addEventListener('resize', handleScroll);
                 
+                const scrollEl = scrollAreaRef.current;
+                if (scrollEl) scrollEl.addEventListener('scroll', handleScroll, { passive: true });
+                window.addEventListener('scroll', handleScroll, { passive: true }); // Para capturar scroll do mobile/window se houver
+                
                 // Observador inteligente do DOM
                 let observer;
-                if (scrollAreaRef.current) {
+                if (scrollEl) {
                     observer = new MutationObserver(() => handleScroll());
-                    observer.observe(scrollAreaRef.current, { childList: true, subtree: true });
+                    observer.observe(scrollEl, { childList: true, subtree: true });
                 }
 
                 return () => {
                     window.removeEventListener('resize', handleScroll);
+                    window.removeEventListener('scroll', handleScroll);
+                    if (scrollEl) scrollEl.removeEventListener('scroll', handleScroll);
                     if (observer) observer.disconnect();
                     clearTimeout(t1);
                     clearTimeout(t2);
@@ -676,7 +755,7 @@
             const [isGcOpen, setIsGcOpen] = useState(false);
             const [gcUser, setGcUser] = useState(() => { 
                 try { 
-                    const savedUser = localStorage.getItem('helpdesk_gc_user');
+                    const savedUser = safeStorage.get('helpdesk_gc_user');
                     return savedUser ? JSON.parse(savedUser) : null; 
                 } catch { 
                     return null; 
@@ -684,7 +763,7 @@
             });
             const [globalChats, setGlobalChats] = useState([]);
             const [gcActiveRoom, setGcActiveRoom] = useState(null);
-            const [gcReadTimes, setGcReadTimes] = useState(() => { try { return JSON.parse(localStorage.getItem('helpdesk_gc_reads')) || {}; } catch { return {}; } });
+            const [gcReadTimes, setGcReadTimes] = useState(() => safeStorage.getJSON('helpdesk_gc_reads', {}));
             const [gcUserForm, setGcUserForm] = useState({ name: '', unit: '', sector: '' });
             const [isGcUnitMenuOpen, setIsGcUnitMenuOpen] = useState(false);
             const gcUnitMenuRef = useRef(null);
@@ -695,10 +774,8 @@
             const [editingGcMsgText, setEditingGcMsgText] = useState('');
             const [replyingToGcMsg, setReplyingToGcMsg] = useState(null);
 
-            const prevGlobalChatsRef = useRef({});
-            const isInitialLoadGc = useRef(true);
             const gcStateRef = useRef({ isOpen: false, room: null });
-
+            
             useEffect(() => { gcStateRef.current = { isOpen: isGcOpen, room: gcActiveRoom }; }, [isGcOpen, gcActiveRoom]);
 
             useEffect(() => { setGcMessageLimit(50); setReplyingToGcMsg(null); }, [gcActiveRoom, isGcOpen]);
@@ -709,7 +786,6 @@
             const pieChartRef = useRef(null);
             const lineChartInstanceRef = useRef(null);
             const pieChartInstanceRef = useRef(null);
-            const isInitialLoadAvisos = useRef(true);
 
             // Inventário
             const [inventoryTab, setInventoryTab] = useState('equipments');
@@ -773,22 +849,22 @@
             const [isCamUnitMenuOpen, setIsCamUnitMenuOpen] = useState(false);
             const [isCamFilterUnitMenuOpen, setIsCamFilterUnitMenuOpen] = useState(false);
             const [isCamFilterStatusMenuOpen, setIsCamFilterStatusMenuOpen] = useState(false);
-            const [camViewMode, setCamViewMode] = useState(() => localStorage.getItem('camViewMode') || 'grid');
-            const [eqViewMode, setEqViewMode] = useState(() => localStorage.getItem('eqViewMode') || 'list');
-            const [accLayoutMode, setAccLayoutMode] = useState(() => localStorage.getItem('accLayoutMode') || 'grid');
-            const [accMovementsLayoutMode, setAccMovementsLayoutMode] = useState(() => localStorage.getItem('accMovementsLayoutMode') || 'list');
+            const [camViewMode, setCamViewMode] = useState(() => safeStorage.get('camViewMode', 'grid'));
+            const [eqViewMode, setEqViewMode] = useState(() => safeStorage.get('eqViewMode', 'list'));
+            const [accLayoutMode, setAccLayoutMode] = useState(() => safeStorage.get('accLayoutMode', 'grid'));
+            const [accMovementsLayoutMode, setAccMovementsLayoutMode] = useState(() => safeStorage.get('accMovementsLayoutMode', 'list'));
 
             useEffect(() => {
-                localStorage.setItem('camViewMode', camViewMode);
+                safeStorage.set('camViewMode', camViewMode);
             }, [camViewMode]);
             useEffect(() => {
-                localStorage.setItem('eqViewMode', eqViewMode);
+                safeStorage.set('eqViewMode', eqViewMode);
             }, [eqViewMode]);
             useEffect(() => {
-                localStorage.setItem('accLayoutMode', accLayoutMode);
+                safeStorage.set('accLayoutMode', accLayoutMode);
             }, [accLayoutMode]);
             useEffect(() => {
-                localStorage.setItem('accMovementsLayoutMode', accMovementsLayoutMode);
+                safeStorage.set('accMovementsLayoutMode', accMovementsLayoutMode);
             }, [accMovementsLayoutMode]);
 
             const [isImportCamModalOpen, setIsImportCamModalOpen] = useState(false);
@@ -842,6 +918,7 @@
             const audioNewRef = useRef(typeof Audio !== "undefined" ? new Audio(SOUND_NEW_TICKET) : null);
             const audioUpdateRef = useRef(typeof Audio !== "undefined" ? new Audio(SOUND_UPDATE) : null);
             const prevTicketsRef = useRef({});
+            const toastTimeoutRef = useRef(null);
             const timeMenuRef = useRef(null);
             const unitMenuRef = useRef(null);
             const priorityMenuRef = useRef(null);
@@ -871,10 +948,14 @@
             }, [reportFilterMode, selectedMonth, selectedYear]);
 
             const filteredTickets = useMemo(() => {
+                const searchLower = searchTerm.toLowerCase();
+                const userSectorNorm = normalizeSearch(userSector);
+                const userUnitNorm = normalizeSearch(userUnit);
+                
                 return tickets.filter(t => {
-                    const matchesAccess = isAdmin || (userSector && userUnit && normalizeSearch(t.department) === normalizeSearch(userSector) && normalizeSearch(t.unit) === normalizeSearch(userUnit));
+                    const matchesAccess = isAdmin || (userSector && userUnit && normalizeSearch(t.department) === userSectorNorm && normalizeSearch(t.unit) === userUnitNorm);
                     if (!matchesAccess) return false;
-                    const matchesSearch = (t.requester || '').toLowerCase().includes(searchTerm.toLowerCase()) || (t.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+                    const matchesSearch = (t.requester || '').toLowerCase().includes(searchLower) || (t.description || '').toLowerCase().includes(searchLower);
                     const matchesUnit = !isAdmin || unitFilter === 'Todas' || t.unit === unitFilter;
                     const matchesPriority = !isAdmin || priorityFilter === 'Todas' || t.priority === priorityFilter;
                     const matchesType = !isAdmin || typeFilter === 'Todos' || (typeFilter === 'problem' ? (t.type === 'problem' || !t.type) : t.type === typeFilter);
@@ -1043,55 +1124,51 @@
                         });
                     }
                 }
-            }, [view, filteredTickets, isDarkMode, reportFilterMode, selectedMonth, selectedYear, isAdmin]);
-
-            // Limpeza ao desmontar o componente principal
-            useEffect(() => {
+                
                 return () => {
-                    if (lineChartInstanceRef.current) { lineChartInstanceRef.current.destroy(); }
-                    if (pieChartInstanceRef.current) { pieChartInstanceRef.current.destroy(); }
+                    if (lineChartInstanceRef.current) { lineChartInstanceRef.current.destroy(); lineChartInstanceRef.current = null; }
+                    if (pieChartInstanceRef.current) { pieChartInstanceRef.current.destroy(); pieChartInstanceRef.current = null; }
                 };
-            }, []);
+            }, [view, filteredTickets, isDarkMode, reportFilterMode, selectedMonth, selectedYear, isAdmin]);
 
             useEffect(() => {
                 setPersistence(auth, browserLocalPersistence).catch(() => {});
                 const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
                     setUser(currentUser);
                     if (currentUser) {
-                        const isTech = !currentUser.isAnonymous;
+                        const isTech = !currentUser.isAnonymous && currentUser.email && currentUser.email.toLowerCase().endsWith('@' + ADMIN_DOMAIN);
                         if (isTech) {
                             setIsAdmin(true);
-                            localStorage.setItem('helpdesk_is_admin', 'true');
-                            if (currentUser.email) {
-                                const name = formatName(currentUser.email.split('@')[0]);
-                                setTechName(name);
-                                localStorage.setItem('helpdesk_tech_name', name);
-                            }
+                            safeStorage.set('helpdesk_is_admin', 'true');
+                            const name = formatName(currentUser.email.split('@')[0]);
+                            setTechName(name);
+                            safeStorage.set('helpdesk_tech_name', name);
                         } else {
                             setIsAdmin(false);
-                            localStorage.removeItem('helpdesk_is_admin');
-                            localStorage.removeItem('helpdesk_tech_name');
+                            safeStorage.remove('helpdesk_is_admin');
+                            safeStorage.remove('helpdesk_tech_name');
                             setView(v => (v === 'dashboard' || v === 'inventory' || v === 'reports' || v === 'archive' || v === 'kanban' || v === 'checklists') ? 'landing' : v);
                         }
                     } else {
                         setIsAdmin(false);
-                        localStorage.removeItem('helpdesk_is_admin');
-                        localStorage.removeItem('helpdesk_tech_name');
+                        safeStorage.remove('helpdesk_is_admin');
+                        safeStorage.remove('helpdesk_tech_name');
                         signInAnonymously(auth).catch(e => {
                             if (e.code === 'auth/operation-not-allowed') {
                                 setFirebaseError({title: "Auth Anônima", message: "Ative o login anônimo no Firebase Authentication."});
                             }
                         });
                     }
+                    setIsAuthInitializing(false);
                 });
                 return () => unsubscribe();
             }, []);
 
-            useEffect(() => { localStorage.setItem('helpdesk_read_times', JSON.stringify(lastReadTimes)); }, [lastReadTimes]);
+            useEffect(() => { safeStorage.setJSON('helpdesk_read_times', lastReadTimes); }, [lastReadTimes]);
             
             // NOVO EFEITO: Sincroniza o modo escuro nativamente com o HTML/Body e Meta Tags (para Safari/iOS)
             useEffect(() => { 
-                localStorage.setItem('helpdesk_dark_mode', isDarkMode); 
+                safeStorage.set('helpdesk_dark_mode', isDarkMode); 
                 const bgColor = isDarkMode ? '#020617' : '#f8fafc'; // slate-950 ou slate-50
                 document.documentElement.classList.toggle('dark', isDarkMode);
                 document.documentElement.style.backgroundColor = bgColor;
@@ -1100,29 +1177,31 @@
                 if (metaThemeColor) metaThemeColor.setAttribute('content', bgColor);
             }, [isDarkMode]);
 
-            useEffect(() => { localStorage.setItem('helpdesk_gc_reads', JSON.stringify(gcReadTimes)); }, [gcReadTimes]);
+            useEffect(() => { safeStorage.setJSON('helpdesk_gc_reads', gcReadTimes); }, [gcReadTimes]);
             useEffect(() => { setDailyPhrase(MOTIVATIONAL_PHRASES[Math.floor(Math.random() * MOTIVATIONAL_PHRASES.length)]); }, []);
             
             // Garantir que as informações do usuário do chat sejam mantidas atualizadas no storage
             useEffect(() => {
                 if (gcUser) {
-                    localStorage.setItem('helpdesk_gc_user', JSON.stringify(gcUser));
+                    safeStorage.setJSON('helpdesk_gc_user', gcUser);
                 } else {
-                    localStorage.removeItem('helpdesk_gc_user');
+                    safeStorage.remove('helpdesk_gc_user');
                 }
             }, [gcUser]);
 
             // Global Chat Effect
             useEffect(() => {
                 if (!user) return;
+                let isInitialLoad = true;
+                const prevGlobalChats = {};
                 const unsub = onSnapshot(collection(db, 'global_chats'), (snapshot) => {
                     const chats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     
-                    if (!isInitialLoadGc.current) {
+                    if (!isInitialLoad) {
                         snapshot.docChanges().forEach((change) => {
                             const docId = change.doc.id;
                             const currentData = change.doc.data();
-                            const prevData = prevGlobalChatsRef.current[docId];
+                            const prevData = prevGlobalChats[docId];
 
                             if (change.type === "added" || change.type === "modified") {
                                 const oldMsgs = prevData?.messages || [];
@@ -1163,11 +1242,11 @@
                                     }
                                 }
                             }
-                            prevGlobalChatsRef.current[docId] = currentData;
+                            prevGlobalChats[docId] = currentData;
                         });
                     } else {
-                        snapshot.docs.forEach(doc => { prevGlobalChatsRef.current[doc.id] = doc.data(); });
-                        isInitialLoadGc.current = false;
+                        snapshot.docs.forEach(doc => { prevGlobalChats[doc.id] = doc.data(); });
+                        isInitialLoad = false;
                     }
                     
                     setGlobalChats(chats);
@@ -1208,27 +1287,29 @@
             const markGcAsRead = (roomId) => {
                 setGcReadTimes(prev => {
                     const newTimes = { ...prev, [roomId]: new Date().toISOString() };
-                    localStorage.setItem('helpdesk_gc_reads', JSON.stringify(newTimes));
+                    // O useEffect acima já vai cuidar do localStorage
                     return newTimes;
                 });
             };
 
             useEffect(() => {
+                let timer1, timer2;
                 if (isGcOpen) {
                     if (!isAdmin && gcUser) markGcAsRead(`${normalizeSearch(gcUser.unit)}_${normalizeSearch(gcUser.sector)}`);
                     else if (isAdmin && gcActiveRoom) markGcAsRead(gcActiveRoom);
                     
                     if (gcActiveRoom || (!isAdmin && gcUser)) {
                         // Rolagem padrão para o fim ao entrar em um chat
-                        setTimeout(() => gcEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 150);
+                        timer1 = setTimeout(() => gcEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 150);
                     } else if (isAdmin && !gcActiveRoom) {
                         // Rolagem para o topo ao voltar para a lista de salas
-                        setTimeout(() => {
+                        timer2 = setTimeout(() => {
                             const list = document.getElementById('gc-room-list');
                             if (list) list.scrollTo({ top: 0, behavior: 'smooth' });
                         }, 50);
                     }
                 }
+                return () => { clearTimeout(timer1); clearTimeout(timer2); };
             }, [isGcOpen, gcActiveRoom, globalChats, isAdmin, gcUser]);
 
             const handleStartGc = (e) => {
@@ -1294,11 +1375,17 @@
             const handleEditGcMessageSubmit = async (e, roomId, msgId) => {
                 e.preventDefault();
                 if (!editingGcMsgText.trim()) return;
-                const roomData = globalChats.find(c => c.id === roomId);
-                if (!roomData) return;
-                const updatedMessages = roomData.messages.map(m => m.id === msgId ? { ...m, text: editingGcMsgText.trim(), editedAt: new Date().toISOString() } : m);
                 try {
-                    await updateDoc(doc(db, 'global_chats', roomId), { messages: updatedMessages });
+                    await runTransaction(db, async (transaction) => {
+                        const docRef = doc(db, 'global_chats', roomId);
+                        const snap = await transaction.get(docRef);
+                        if (!snap.exists()) return;
+                        const currentMessages = snap.data().messages || [];
+                        const updatedMessages = currentMessages.map(m => 
+                            m.id === msgId ? { ...m, text: editingGcMsgText.trim(), editedAt: new Date().toISOString() } : m
+                        );
+                        transaction.update(docRef, { messages: updatedMessages });
+                    });
                     setEditingGcMsgId(null);
                     setEditingGcMsgText('');
                 } catch (error) { showToast("Erro ao editar mensagem", "error"); }
@@ -1324,6 +1411,7 @@
             useEffect(() => {
                 if (!user) return;
                 requestNotificationPermission(); // Pede permissão de notificação do SO
+                let isInitialLoad = true;
                 
                 const unsubAvisos = onSnapshot(collection(db, 'avisos'), (snapshot) => {
                     const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -1336,7 +1424,7 @@
                     });
                     setAnnouncements(sortedAvisos);
                     
-                    if (!isInitialLoadAvisos.current) {
+                    if (!isInitialLoad) {
                         snapshot.docChanges().forEach((change) => {
                             if (change.type === "added") {
                                 const data = change.doc.data();
@@ -1349,7 +1437,7 @@
                             }
                         });
                     } else {
-                        isInitialLoadAvisos.current = false;
+                        isInitialLoad = false;
                     }
                 }, (error) => { console.warn("Erro avisos:", error); setAnnouncements([]); });
                 
@@ -1424,8 +1512,12 @@
             };
 
             const showToast = (message, type = 'info', action = null) => {
+                if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
                 setToast({ message: String(message), type, action });
-                setTimeout(() => setToast(null), action ? 6000 : 4000);
+                toastTimeoutRef.current = setTimeout(() => {
+                    setToast(null);
+                    toastTimeoutRef.current = null;
+                }, action ? 6000 : 4000);
             };
 
             useEffect(() => {
@@ -1585,36 +1677,77 @@
 
             // NOVO EFEITO: Rolagem automática restrita ao chat interno e público do chamado 
             useEffect(() => {
-                if (expandedChatId) {
-                    setTimeout(() => {
-                        const container = document.getElementById('ticket-chat-container');
-                        if (container) {
-                            // Rola APENAS o container do chat, mantendo a página intacta no mesmo lugar
-                            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-                        }
-                    }, 150);
-                }
+                if (!expandedChatId) return;
+                const timer = setTimeout(() => {
+                    const container = document.getElementById('ticket-chat-container');
+                    if (container) {
+                        // Rola APENAS o container do chat, mantendo a página intacta no mesmo lugar
+                        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+                    }
+                }, 150);
+                return () => clearTimeout(timer);
             }, [expandedChatId, activeChatTab, tickets.find(t => t.id === expandedChatId)?.messages?.length, tickets.find(t => t.id === expandedChatId)?.internalMessages?.length]);
-
-            const handleImageSelect = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (e) => setChatImagePreview(e.target.result);
-                reader.readAsDataURL(file);
-                setChatImageFile(file);
+            const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
+                return new Promise((resolve) => {
+                    if (file.size < 500 * 1024) { resolve(file); return; } // < 500KB, não comprimir
+                    const img = new Image();
+                    const objectUrl = URL.createObjectURL(file);
+                    img.onload = () => {
+                        URL.revokeObjectURL(objectUrl);
+                        const canvas = document.createElement('canvas');
+                        const ratio = Math.min(maxWidth / img.width, maxWidth / img.height, 1);
+                        canvas.width = img.width * ratio;
+                        canvas.height = img.height * ratio;
+                        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                        canvas.toBlob((blob) => {
+                            if (blob) {
+                                const fileName = (file.name || 'image.jpg').replace(/\.\w+$/, '.jpg');
+                                resolve(new File([blob], fileName, { type: 'image/jpeg' }));
+                            } else {
+                                resolve(file); // Fallback: retorna original se toBlob falhar
+                            }
+                        }, 'image/jpeg', quality);
+                    };
+                    img.onerror = () => {
+                        URL.revokeObjectURL(objectUrl);
+                        resolve(file); // Fallback: retorna arquivo original se falhar
+                    };
+                    img.src = objectUrl;
+                });
             };
 
-            const handlePaste = (e) => {
+            const handleImageSelect = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setIsCompressing(true);
+                try {
+                    const compressedFile = await compressImage(file);
+                    const reader = new FileReader();
+                    reader.onload = (e) => setChatImagePreview(e.target.result);
+                    reader.readAsDataURL(compressedFile);
+                    setChatImageFile(compressedFile);
+                } finally {
+                    setIsCompressing(false);
+                }
+            };
+
+            const handlePaste = async (e) => {
+                if (!e.clipboardData) return;
                 const items = e.clipboardData.items;
                 for (let i = 0; i < items.length; i++) {
                     if (items[i].type.indexOf('image') !== -1) {
                         e.preventDefault();
                         const file = items[i].getAsFile();
-                        const reader = new FileReader();
-                        reader.onload = (e) => setChatImagePreview(e.target.result);
-                        reader.readAsDataURL(file);
-                        setChatImageFile(file);
+                        setIsCompressing(true);
+                        try {
+                            const compressedFile = await compressImage(file);
+                            const reader = new FileReader();
+                            reader.onload = (e) => setChatImagePreview(e.target.result);
+                            reader.readAsDataURL(compressedFile);
+                            setChatImageFile(compressedFile);
+                        } finally {
+                            setIsCompressing(false);
+                        }
                         return;
                     }
                 }
@@ -1655,6 +1788,9 @@
                     onConfirm: async () => {
                         setIsSubmitting(true);
                         try {
+                            if (attachmentToRemove.url && attachmentToRemove.url.includes('firebasestorage.googleapis.com')) {
+                                try { await deleteObject(ref(storage, attachmentToRemove.url)); } catch (e) { console.warn("Erro ao deletar arquivo do storage", e); }
+                            }
                             const newAttachments = (currentData.attachments || []).filter(a => a.url !== attachmentToRemove.url);
                             if (currentData.id) {
                                 await updateDoc(doc(db, collectionName, currentData.id), { attachments: newAttachments, updatedAt: serverTimestamp() });
@@ -1984,7 +2120,7 @@
                 const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", `equipamentos_${new Date().toISOString().split('T')[0]}.csv`);
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
             };
 
             const handleDownloadSampleCsv = () => {
@@ -1994,7 +2130,7 @@
                 const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", `modelo_importacao_equipamentos.csv`);
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
             };
 
             const handleImportEqCsv = async (e) => {
@@ -2091,7 +2227,7 @@
                 const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", `acessorios_${new Date().toISOString().split('T')[0]}.csv`);
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
             };
 
             const handleDownloadSampleAccCsv = () => {
@@ -2101,7 +2237,7 @@
                 const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", `modelo_importacao_acessorios.csv`);
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
             };
 
             const handleDownloadSampleCamCsv = () => {
@@ -2111,7 +2247,7 @@
                 const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", `modelo_importacao_cameras.csv`);
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
             };
 
             const handleImportCamCsv = async (e) => {
@@ -2413,7 +2549,7 @@
                 const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", `cameras_${new Date().toISOString().split('T')[0]}.csv`);
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
             };
 
             const isTaskDue = (task) => {
@@ -2470,23 +2606,25 @@
                 if (!loginForm.email || !loginForm.password) { setLoginError(true); setIsLoggingIn(false); return; }
                 try {
                     const emailToUse = loginForm.email.trim().includes('@') ? loginForm.email.trim() : `${loginForm.email.trim()}${EMAIL_DOMAIN}`;
+                    if (!emailToUse.toLowerCase().endsWith('@' + ADMIN_DOMAIN)) {
+                        setLoginError(true); showToast("E-mail não autorizado para acesso admin.", "error"); setIsLoggingIn(false); return;
+                    }
                     const userCredential = await signInWithEmailAndPassword(auth, emailToUse, loginForm.password);
                     const name = userCredential.user.email.split('@')[0]; 
                     setIsAdmin(true); setTechName(formatName(name)); setView('dashboard');
-                    localStorage.setItem('helpdesk_is_admin', 'true'); localStorage.setItem('helpdesk_tech_name', name);
+                    safeStorage.set('helpdesk_is_admin', 'true'); safeStorage.set('helpdesk_tech_name', name);
                     setLoginForm({ email: '', password: '' }); showToast(`Bem-vindo, ${formatName(name)}!`, 'success');
                 } catch (error) { setLoginError(true); showToast("Falha no login. Verifique as credenciais.", "error"); } finally { setIsLoggingIn(false); }
             };
 
-            const handleLogout = () => { signOut(auth).then(() => { setIsAdmin(false); setTechName(''); localStorage.removeItem('helpdesk_is_admin'); localStorage.removeItem('helpdesk_tech_name'); showToast("Sessão encerrada"); setView('landing'); }); };
+            const handleLogout = () => { signOut(auth).then(() => { setIsAdmin(false); setTechName(''); safeStorage.remove('helpdesk_is_admin'); safeStorage.remove('helpdesk_tech_name'); showToast("Sessão encerrada"); setView('landing'); }); };
 
             const handleAccessConfirm = async () => {
                 setIsAccessing(true); await new Promise(r => setTimeout(r, 600));
                 if (unitInput.trim() && sectorInput.trim()) {
-                    let finalUnit = unitInput.trim(); const unitMap = { "bw": "Bonway", "evt": "Everest", "evs": "EverSky", "ht": "Barueri", "gd": "Good" };
-                    if (unitMap[finalUnit.toLowerCase()]) finalUnit = unitMap[finalUnit.toLowerCase()];
+                    let finalUnit = normalizeUnitName(unitInput);
                     setUserUnit(finalUnit); setUserSector(sectorInput.trim());
-                    localStorage.setItem('helpdesk_user_unit', finalUnit); localStorage.setItem('helpdesk_user_sector', sectorInput.trim());
+                    safeStorage.set('helpdesk_user_unit', finalUnit); safeStorage.set('helpdesk_user_sector', sectorInput.trim());
                     showToast("Acesso autorizado!");
                 } else { showToast("Preencha os dados.", "error"); }
                 setIsAccessing(false);
@@ -2496,12 +2634,11 @@
                 e.preventDefault(); if (!formData.requester || !formData.department || !formData.description || !formData.unit) { showToast("Preencha os campos obrigatórios.", "error"); return; }
                 setIsSubmitting(true);
                 try {
-                    let normalizedUnit = formData.unit.trim(); const unitMap = { "bw": "Bonway", "evt": "Everest", "evs": "EverSky", "ht": "Barueri", "gd": "Good" };
-                    if (unitMap[normalizedUnit.toLowerCase()]) normalizedUnit = unitMap[normalizedUnit.toLowerCase()];
+                    let normalizedUnit = normalizeUnitName(formData.unit);
                     const finalData = { ...formData, unit: normalizedUnit, type: ticketType, status: 'aguardando', priority: 'baixa', technician: 'Pendente', notes: '', messages: [], internalMessages: [], history: [{ type: 'creation', label: 'Chamado aberto', timestamp: new Date().toISOString(), user: formatName(formData.requester) }], createdAt: serverTimestamp(), updatedAt: serverTimestamp(), userId: user ? user.uid : 'anon' };
                     if (ticketType === 'request') { finalData.machineName = ''; finalData.anydeskId = ''; finalData.accessTime = ''; }
                     await addDoc(collection(db, 'chamados'), finalData);
-                    if (!userSector || !userUnit) { setUserSector(formData.department); setUserUnit(normalizedUnit); localStorage.setItem('helpdesk_user_sector', formData.department); localStorage.setItem('helpdesk_user_unit', normalizedUnit); }
+                    if (!userSector || !userUnit) { setUserSector(formData.department); setUserUnit(normalizedUnit); safeStorage.set('helpdesk_user_sector', formData.department); safeStorage.set('helpdesk_user_unit', normalizedUnit); }
                     setFormData({ requester: '', department: '', description: '', machineName: '', anydeskId: '', unit: '', accessTime: 'A Qualquer Momento' }); setTicketType('problem'); setView('dashboard');
                     showToast("Chamado criado com sucesso!", "success");
                 } catch (error) { showToast("Erro ao criar chamado.", "error"); } finally { setIsSubmitting(false); }
@@ -2513,15 +2650,31 @@
 
             const sendChatMessage = async (ticketId, text, isInternal = false) => {
                 if (!text.trim() && !chatImageFile) return; if (!user) { showToast("Você precisa estar conectado para enviar mensagens.", "error"); return; }
-                const ticket = tickets.find(t => t.id === ticketId); let imageUrl = null;
+                const ticket = tickets.find(t => t.id === ticketId); let imageUrl = null; let uploadedRef = null;
                 try {
-                    if (chatImageFile) { const snapshot = await uploadBytes(ref(storage, `attachments/${ticketId}/${Date.now()}_${chatImageFile.name}`), chatImageFile); imageUrl = await getDownloadURL(snapshot.ref); }
+                    if (chatImageFile) {
+                        const fileRef = ref(storage, `attachments/${ticketId}/${Date.now()}_${chatImageFile.name}`);
+                        const snapshot = await uploadBytes(fileRef, chatImageFile);
+                        uploadedRef = snapshot.ref;
+                        imageUrl = await getDownloadURL(snapshot.ref);
+                    }
                     const newMessage = { text: text, sender: isAdmin ? techName : ticket?.requester || "Usuário", senderRole: isAdmin ? 'tech' : 'user', timestamp: new Date().toISOString() };
                     if (imageUrl) newMessage.image = imageUrl;
                     await updateDoc(doc(db, 'chamados', ticketId), { [isInternal ? 'internalMessages' : 'messages']: arrayUnion(newMessage), updatedAt: serverTimestamp() });
                     markAsRead(ticketId, isInternal ? 'internal' : 'public'); setChatImageFile(null); setChatImagePreview(null);
-                } catch (error) { showToast("Erro ao enviar mensagem", "error"); }
+                } catch (error) {
+                    if (uploadedRef) { try { await deleteObject(uploadedRef); } catch(e) {} }
+                    showToast("Erro ao enviar mensagem", "error");
+                }
             };
+
+            if (isAuthInitializing) {
+                return (
+                    <div className={`absolute inset-0 flex items-center justify-center font-sans ${isDarkMode ? 'dark bg-slate-950' : 'bg-slate-50'}`}>
+                        <div className="animate-spin w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+                    </div>
+                );
+            }
 
             return (
                 <div className={`absolute inset-0 flex flex-col overflow-hidden font-sans transition-colors duration-300 ${isDarkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`} style={{ colorScheme: isDarkMode ? 'dark' : 'light', '--scrollbar-track': isDarkMode ? '#020617' : '#f8fafc', '--scrollbar-thumb': isDarkMode ? '#334155' : '#cbd5e1', '--scrollbar-hover': isDarkMode ? '#475569' : '#94a3b8' }}>
@@ -3750,7 +3903,7 @@
                                     <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-4 rounded-2xl flex items-center justify-between w-full shadow-sm">
                                     <div className="flex items-center gap-4"><div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl"><Users className="text-blue-600" /></div><div><p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sua Localização</p><p className="font-bold text-sm">{formatDisplay(userUnit)} — {formatDisplay(userSector)}</p></div></div>
                                     <div className="flex gap-2">
-                                        <button onClick={() => { setUserUnit(''); setUserSector(''); localStorage.removeItem('helpdesk_user_unit'); localStorage.removeItem('helpdesk_user_sector'); }} className="px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">Trocar Dados</button>
+                                        <button onClick={() => { setUserUnit(''); setUserSector(''); safeStorage.remove('helpdesk_user_unit'); safeStorage.remove('helpdesk_user_sector'); }} className="px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">Trocar Dados</button>
                                         <button onClick={() => setView(view === 'archive' ? 'dashboard' : 'archive')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${view === 'archive' ? 'bg-blue-600 text-white border-transparent' : 'bg-slate-100 dark:bg-slate-800 dark:border-slate-700'}`}>{view === 'archive' ? 'Ver Ativos' : 'Ver Finalizados'}</button>
                                     </div>
                                     </div>
