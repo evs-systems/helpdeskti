@@ -20,6 +20,8 @@ A aplicação funciona inteiramente no navegador, sem necessidade de backend pr�
 - Sistema de **contestação**: colaboradores podem reabrir chamados finalizados.
 - Atribuição de **prioridade** (Baixa, Média, Alta) e **técnico responsável**.
 - Filtros por unidade, prioridade, tipo e busca textual.
+- Visualização inteligente em **Grade ou Lista** (compacta) com preferências salvas por aba.
+- Paginação otimizada com carregamento dinâmico em lote.
 - Visualização separada: chamados ativos, de outros técnicos, contestados e arquivados.
 - Histórico completo de alterações por chamado.
 
@@ -49,7 +51,7 @@ A aplicação funciona inteiramente no navegador, sem necessidade de backend pr�
 - Controle de status: **Em Uso** ou **Guardado**.
 - Sistema de **baixa** com registro de motivo e possibilidade de restauração.
 - Filtros por tipo de equipamento, unidade e status.
-- **Importação em massa** via arquivo CSV com modelo de planilha para download.
+- **Importação inteligente** via CSV com Upsert (atualiza registros sem duplicar) e proteção anti-injection (CWE-1236).
 - **Exportação** da lista filtrada para CSV.
 - Histórico de movimentações por equipamento.
 
@@ -58,6 +60,11 @@ A aplicação funciona inteiramente no navegador, sem necessidade de backend pr�
 - **Movimentações**: entrada e saída de itens com registro de destino (unidade/setor).
 - Visualização de movimentações por mês/ano com filtro por tipo de acessório.
 - Agrupamento por item com resumo de entradas e saídas.
+
+### 📹 Gestão de Câmeras
+- Cadastro e monitoramento de câmeras de segurança do CFTV.
+- Rotina de **verificação diária** para garantia de gravação e funcionamento.
+- Histórico de revisões e alertas visuais de pendência.
 
 ### 📌 Quadro Kanban (Organização TI)
 - Quadro de tarefas com colunas: **A Fazer**, **Em Andamento**, **Em Revisão** e **Concluído**.
@@ -68,6 +75,8 @@ A aplicação funciona inteiramente no navegador, sem necessidade de backend pr�
 ### 📚 Base de Conhecimento
 - Registro de **informações padrão** da equipe (senhas, procedimentos, links úteis).
 - Busca por título ou conteúdo.
+- Renderização rica e segura com **Markdown**.
+- Visualizador de arquivos integrado e seguro (In-App Sandbox Viewer).
 - Suporte a anexos: documentos, imagens e arquivos auxiliares.
 
 ### ✅ Checklist de Tarefas Recorrentes
@@ -98,5 +107,5 @@ Uso interno — Todos os direitos reservados.
 ---
 
 <p align="center">
-  Desenvolvido com 💙 pela equipe de tecnologia da informação.
+  Desenvolvido com 💙 por Kayck Lima©.
 </p>
