@@ -3753,7 +3753,7 @@
                                                                 <span className="font-bold text-slate-600 dark:text-slate-300 truncate pl-2">
                                                                     {cam.lastVerifiedAt ? (
                                                                         <>
-                                                                            {formatTimestamp(cam.lastVerifiedAt).split(' ')[0]}
+                                                                            {formatTimestamp(cam.lastVerifiedAt).split(' ')[0].replace(',', '')}
                                                                             {cam.lastVerifiedBy && <span className="opacity-70 font-normal"> ({cam.lastVerifiedBy.split(' ')[0]})</span>}
                                                                         </>
                                                                     ) : (
@@ -4027,7 +4027,7 @@
                                                             <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><User size={10}/> Solicitante</p><p className="text-xs font-bold dark:text-slate-300 truncate">{formatName(ticket.requester)}</p></div>
                                                             <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><Building2 size={10}/> Localização</p><p className="text-xs font-bold dark:text-slate-300 truncate">{formatDisplay(ticket.unit)}</p></div>
                                                             <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><UserPlus size={10}/> Atendimento</p><p className="text-xs font-bold text-blue-600 truncate">{ticket.technician || 'Aguardando'}</p></div>
-                                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><Calendar size={10}/> Abertura</p><p className="text-xs font-bold dark:text-slate-300">{formatTimestamp(ticket.createdAt).split(' ')[0]}</p></div>
+                                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><Calendar size={10}/> Abertura</p><p className="text-xs font-bold dark:text-slate-300">{formatTimestamp(ticket.createdAt).split(' ')[0].replace(',', '')}</p></div>
                                                         </div>
                                                         <div className="flex items-center gap-2 mt-2 lg:mt-0 shrink-0">
                                                             <button onClick={() => { setExpandedChatId(ticket.id); setActiveChatTab('public'); markAsRead(ticket.id, 'public'); }} className="relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700">
