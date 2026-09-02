@@ -93,6 +93,7 @@
         "react": "https://esm.sh/react@18.3.1",
         "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
         "lucide-react": "https://esm.sh/lucide-react@1.16.0?external=react",
+        "sucrase": "https://esm.sh/sucrase@3.35.1",
         "firebase/app": "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js",
         "firebase/firestore": "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js",
         "firebase/auth": "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js",
@@ -101,7 +102,7 @@
       }
     }
     </script>
-    <script src="https://unpkg.com/@babel/standalone@7.29.6/babel.min.js" crossorigin="anonymous"></script>
+
     <style>html, body, #root { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }</style>
 </head>
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -138,7 +139,7 @@
         <div class="agy-loader-text">Iniciando Sistema</div>
     </div>
 </div>
-    <script type="text/babel" data-type="module">
+    <script type="text/jsx" id="app-source" data-type="module">
         import React, { useState, useEffect, useRef, useMemo } from 'react';
         import { createRoot } from 'react-dom/client';
         import { 
@@ -752,6 +753,33 @@
                 }
             };
 
+            // Global Chat States
+            const [isGcOpen, setIsGcOpen] = useState(false);
+            const [gcUser, setGcUser] = useState(() => { 
+                try { 
+                    const savedUser = safeStorage.get('helpdesk_gc_user');
+                    return savedUser ? JSON.parse(savedUser) : null; 
+                } catch { 
+                    return null; 
+                } 
+            });
+            const [globalChats, setGlobalChats] = useState([]);
+            const [gcActiveRoom, setGcActiveRoom] = useState(null);
+            const [gcReadTimes, setGcReadTimes] = useState(() => safeStorage.getJSON('helpdesk_gc_reads', {}));
+            const [gcUserForm, setGcUserForm] = useState({ name: '', unit: '', sector: '' });
+            const [isGcUnitMenuOpen, setIsGcUnitMenuOpen] = useState(false);
+            const gcUnitMenuRef = useRef(null);
+            const gcEndRef = useRef(null);
+            const [gcMessageLimit, setGcMessageLimit] = useState(50);
+            const [ticketMessageLimit, setTicketMessageLimit] = useState(50);
+            const [editingGcMsgId, setEditingGcMsgId] = useState(null);
+            const [editingGcMsgText, setEditingGcMsgText] = useState('');
+            const [replyingToGcMsg, setReplyingToGcMsg] = useState(null);
+
+            const gcStateRef = useRef({ isOpen: false, room: null });
+            
+            useEffect(() => { gcStateRef.current = { isOpen: isGcOpen, room: gcActiveRoom }; }, [isGcOpen, gcActiveRoom]);
+
             useEffect(() => {
                 // Executa imediatamente e garante re-cálculos ao longo de 1 segundo (tempo de renderização de imagens/dados)
                 handleScroll();
@@ -782,33 +810,6 @@
                     clearTimeout(t3);
                 };
             }, [view, isGcOpen, tickets.length]); // Agora ele recalcula se a lista de chamados mudar/carregar
-
-            // Global Chat States
-            const [isGcOpen, setIsGcOpen] = useState(false);
-            const [gcUser, setGcUser] = useState(() => { 
-                try { 
-                    const savedUser = safeStorage.get('helpdesk_gc_user');
-                    return savedUser ? JSON.parse(savedUser) : null; 
-                } catch { 
-                    return null; 
-                } 
-            });
-            const [globalChats, setGlobalChats] = useState([]);
-            const [gcActiveRoom, setGcActiveRoom] = useState(null);
-            const [gcReadTimes, setGcReadTimes] = useState(() => safeStorage.getJSON('helpdesk_gc_reads', {}));
-            const [gcUserForm, setGcUserForm] = useState({ name: '', unit: '', sector: '' });
-            const [isGcUnitMenuOpen, setIsGcUnitMenuOpen] = useState(false);
-            const gcUnitMenuRef = useRef(null);
-            const gcEndRef = useRef(null);
-            const [gcMessageLimit, setGcMessageLimit] = useState(50);
-            const [ticketMessageLimit, setTicketMessageLimit] = useState(50);
-            const [editingGcMsgId, setEditingGcMsgId] = useState(null);
-            const [editingGcMsgText, setEditingGcMsgText] = useState('');
-            const [replyingToGcMsg, setReplyingToGcMsg] = useState(null);
-
-            const gcStateRef = useRef({ isOpen: false, room: null });
-            
-            useEffect(() => { gcStateRef.current = { isOpen: isGcOpen, room: gcActiveRoom }; }, [isGcOpen, gcActiveRoom]);
 
             useEffect(() => { setGcMessageLimit(50); setReplyingToGcMsg(null); }, [gcActiveRoom, isGcOpen]);
             useEffect(() => { setTicketMessageLimit(50); }, [expandedChatId, activeChatTab]);
@@ -4402,6 +4403,19 @@
         }
         const root = createRoot(document.getElementById('root'));
         root.render(<App />);
+    </script>
+    <script type="module">
+        import { transform } from 'sucrase';
+        try {
+            const source = document.getElementById('app-source').textContent;
+            const compiled = transform(source, { transforms: ['jsx'], production: true }).code;
+            const script = document.createElement('script');
+            script.type = 'module';
+            script.textContent = compiled;
+            document.body.appendChild(script);
+        } catch (err) {
+            console.error('Sucrase compilation failed:', err);
+        }
     </script>
 </body>
 </html>
