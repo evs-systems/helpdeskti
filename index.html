@@ -13,6 +13,21 @@
     
     <script>
         (function() {
+            // Inicialização imediata de tema (Anti-FOUC) baseada estritamente na preferência salva do usuário
+            try {
+                var isDark = localStorage.getItem('helpdesk_dark_mode') === 'true';
+                var docEl = document.documentElement;
+                if (isDark) {
+                    docEl.classList.add('dark');
+                    docEl.style.backgroundColor = '#020617';
+                } else {
+                    docEl.classList.remove('dark');
+                    docEl.style.backgroundColor = '#f8fafc';
+                }
+                var metaTheme = document.querySelector('meta[name="theme-color"]');
+                if (metaTheme) metaTheme.setAttribute('content', isDark ? '#020617' : '#f8fafc');
+            } catch (e) {}
+
             const originalWarn = console.warn;
             console.warn = function(...args) {
                 if (typeof args[0] === 'string' && args[0].includes('Tailwind CSS should not be used in production')) return;
@@ -108,7 +123,22 @@
     }
     </script>
 
-    <style>html, body, #root { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }</style>
+    <style>
+        html, body, #root {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+        html.dark, html.dark body, html.dark #root {
+            background-color: #020617;
+            color: #f8fafc;
+        }
+    </style>
 </head>
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
     <div id="root"></div>
