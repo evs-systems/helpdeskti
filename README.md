@@ -1,14 +1,12 @@
 # 🖥️ HelpDesk TI
 
-Sistema completo de **Gestão de Chamados, Inventário e Organização** para equipes de Tecnologia da Informação. Desenvolvido como uma aplicação web single-page (SPA) com React e Firebase, hospedado gratuitamente no GitHub Pages.
+Sistema completo de **Gestão de Chamados, Inventário e Organização** para equipes de Tecnologia da Informação.
 
 ---
 
 ## 🎯 Visão Geral
 
 O HelpDesk TI é uma plataforma projetada para centralizar e otimizar a operação de equipes de suporte técnico em ambientes corporativos com múltiplas unidades. Ele permite que **colaboradores** abram chamados e acompanhem o andamento em tempo real, enquanto **técnicos de TI** gerenciam todo o ciclo de vida do atendimento, inventário de equipamentos e tarefas internas — tudo em uma única interface.
-
-A aplicação funciona inteiramente no navegador, sem necessidade de backend próprio, utilizando o **Firebase** como infraestrutura de dados em tempo real.
 
 ---
 
@@ -40,7 +38,7 @@ A aplicação funciona inteiramente no navegador, sem necessidade de backend pr�
 - Notificações no navegador (push) e toasts interativos com ação "Ver Chat".
 
 ### 📊 Relatórios e Dashboards
-- Gráficos interativos de **volume de chamados** (por hora, dia ou mês) com Chart.js.
+- Gráficos interativos de **volume de chamados** (por hora, dia ou mês).
 - Gráfico de rosca com distribuição entre **Problemas Técnicos** e **Solicitações**.
 - Filtros por período: Hoje, Mês atual, Ano completo ou período personalizado.
 - Estatísticas detalhadas: total, finalizados, contestados, unidade/setor com mais demanda.
@@ -51,7 +49,7 @@ A aplicação funciona inteiramente no navegador, sem necessidade de backend pr�
 - Controle de status: **Em Uso** ou **Guardado**.
 - Sistema de **baixa** com registro de motivo e possibilidade de restauração.
 - Filtros por tipo de equipamento, unidade e status.
-- **Importação inteligente** via CSV com Upsert (atualiza registros sem duplicar) e proteção anti-injection (CWE-1236).
+- **Importação inteligente** via CSV com atualização de registros existentes (sem duplicar).
 - **Exportação** da lista filtrada para CSV.
 - Histórico de movimentações por equipamento.
 
@@ -73,10 +71,10 @@ A aplicação funciona inteiramente no navegador, sem necessidade de backend pr�
 - Upload de documentos e arquivos de apoio por tarefa.
 
 ### 📚 Base de Conhecimento
-- Registro de **informações padrão** da equipe (senhas, procedimentos, links úteis).
+- Registro de **informações padrão** da equipe (procedimentos, referências e links úteis).
 - Busca por título ou conteúdo.
-- Renderização rica e segura com **Markdown**.
-- Visualizador de arquivos integrado e seguro (In-App Sandbox Viewer).
+- Conteúdo formatado para leitura (negrito, listas e links).
+- Visualizador de arquivos integrado.
 - Suporte a anexos: documentos, imagens e arquivos auxiliares.
 
 ### ✅ Checklist de Tarefas Recorrentes
@@ -94,8 +92,8 @@ A aplicação funciona inteiramente no navegador, sem necessidade de backend pr�
 ### 🌙 Interface
 - **Tema Claro e Escuro** com sincronização nativa (inclusive para Safari/iOS).
 - Design responsivo e mobile-first com menu lateral adaptativo.
-- **PWA** (Progressive Web App): instalável como aplicativo no desktop e celular.
-- Notificações nativas do sistema operacional (browser push notifications).
+- Possibilidade de instalar como aplicativo no desktop e no celular.
+- Notificações nativas do sistema operacional.
 - Controle de áudio (ativar/desativar sons de notificação).
 - Frases motivacionais diárias no dashboard do técnico.
 
