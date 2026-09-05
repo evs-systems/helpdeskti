@@ -1013,6 +1013,8 @@
             const camFilterUnitMenuRef = useRef(null);
             const camFilterStatusMenuRef = useRef(null);
             const kanbanStatusMenuRef = useRef(null);
+            const mobileMenuRef = useRef(null);
+            const mobileMenuBtnRef = useRef(null);
 
             const dateFilter = useMemo(() => {
                 let start = new Date(), end = new Date();
@@ -1579,6 +1581,9 @@
                         checkAndClose(camUnitMenuRef, setIsCamUnitMenuOpen);
                         checkAndClose(camFilterUnitMenuRef, setIsCamFilterUnitMenuOpen);
                         checkAndClose(camFilterStatusMenuRef, setIsCamFilterStatusMenuOpen);
+                        if (mobileMenuRef.current && !mobileMenuRef.current.contains(target) && (!mobileMenuBtnRef.current || !mobileMenuBtnRef.current.contains(target))) {
+                            setIsMobileMenuOpen(false);
+                        }
                     } catch(err) {
                         console.warn("Click outside error:", err);
                     }
@@ -3003,7 +3008,7 @@
                             {/* --- MENU MOBILE (Telas Pequenas) --- */}
                             <div className="flex lg:hidden items-center gap-2">
                                 {deferredPrompt && (<button onClick={handleInstallClick} className="p-2 rounded-xl text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 dark:text-blue-400 transition-all animate-pulse" title="Instalar App"><Download size={20} /></button>)}
-                                <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                                <button ref={mobileMenuBtnRef} onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" aria-label={isMobileMenuOpen ? "Fechar menu" : "Abrir menu"}>
                                     {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
                                 </button>
                             </div>
@@ -3011,35 +3016,42 @@
 
                         {/* PAINEL EXPANSÍVEL MOBILE */}
                         {isMobileMenuOpen && (
-                            <div className="lg:hidden absolute top-16 left-0 w-full bg-white dark:bg-slate-900 border-b dark:border-slate-800 shadow-xl animate-in slide-in-from-top-2 p-4 flex flex-col gap-3 z-40">
-                                {isAdmin && view !== 'landing' && view !== 'login' && (
-                                    <div className="flex flex-col gap-2 pb-3 mb-1 border-b dark:border-slate-800">
-                                        <button onClick={() => { setView('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><ClipboardList size={18} /> Painel Principal</button>
-                                        <button onClick={() => { setView('checklists'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'checklists' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><ListTodo size={18} /> Checklists</button>
-                                        <button onClick={() => { setView('kanban'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'kanban' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><Kanban size={18} /> Atividades</button>
-                                        <button onClick={() => { setView('inventory'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'inventory' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><Database size={18} /> Inventários</button>
-                                        <button onClick={() => { setView('reports'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'reports' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><BarChart3 size={18} /> Relatórios</button>
-                                    </div>
-                                )}
-
-                                {!isAdmin && view !== 'landing' && view !== 'new' && (
-                                    <button onClick={() => { setView('new'); setIsMobileMenuOpen(false); }} className="flex items-center justify-center gap-3 px-4 py-3.5 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-md mb-2"><PlusCircle size={18} /> Novo Chamado</button>
-                                )}
-
-                                <div className="grid grid-cols-2 gap-2">
-                                    {isAdmin && (
-                                        <button onClick={() => { setIsAnnouncementModalOpen(true); setIsMobileMenuOpen(false); }} className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-white bg-blue-600 shadow-md transition-all"><Megaphone size={18} /> Avisos Globais</button>
+                            <>
+                                <div
+                                    onClick={() => setIsMobileMenuOpen(false)}
+                                    className="fixed inset-0 top-16 bg-slate-900/40 backdrop-blur-xs z-30 lg:hidden animate-in fade-in duration-200"
+                                    aria-hidden="true"
+                                />
+                                <div ref={mobileMenuRef} className="lg:hidden absolute top-16 left-0 w-full bg-white dark:bg-slate-900 border-b dark:border-slate-800 shadow-xl animate-in slide-in-from-top-2 p-4 flex flex-col gap-3 z-40">
+                                    {isAdmin && view !== 'landing' && view !== 'login' && (
+                                        <div className="flex flex-col gap-2 pb-3 mb-1 border-b dark:border-slate-800">
+                                            <button onClick={() => { setView('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><ClipboardList size={18} /> Painel de Chamados</button>
+                                            <button onClick={() => { setView('checklists'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'checklists' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><ListTodo size={18} /> Checklists</button>
+                                            <button onClick={() => { setView('kanban'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'kanban' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><Kanban size={18} /> Atividades</button>
+                                            <button onClick={() => { setView('inventory'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'inventory' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><Database size={18} /> Inventários</button>
+                                            <button onClick={() => { setView('reports'); setIsMobileMenuOpen(false); }} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${view === 'reports' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300'}`}><BarChart3 size={18} /> Relatórios</button>
+                                        </div>
                                     )}
-                                    <button onClick={() => setIsAudioEnabled(!isAudioEnabled)} className={`flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${isAudioEnabled ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400'}`}>{isAudioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />} Áudio</button>
-                                    <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 transition-colors">{isDarkMode ? <Sun size={18} /> : <Moon size={18} />} Tema</button>
-                                </div>
 
-                                {!isAdmin ? (
-                                    <button onClick={() => { setView('login'); setIsMobileMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest py-3.5 mt-2 rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300 transition-colors"><Lock size={16} /> Acesso TI</button>
-                                ) : (
-                                    <button onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest py-3.5 mt-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 dark:hover:text-red-400 transition-colors"><LogOut size={16} /> Sair do Sistema</button>
-                                )}
-                            </div>
+                                    {!isAdmin && view !== 'landing' && view !== 'new' && (
+                                        <button onClick={() => { setView('new'); setIsMobileMenuOpen(false); }} className="flex items-center justify-center gap-3 px-4 py-3.5 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-md mb-2"><PlusCircle size={18} /> Novo Chamado</button>
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {isAdmin && (
+                                            <button onClick={() => { setIsAnnouncementModalOpen(true); setIsMobileMenuOpen(false); }} className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-white bg-blue-600 shadow-md transition-all"><Megaphone size={18} /> Avisos Globais</button>
+                                        )}
+                                        <button onClick={() => setIsAudioEnabled(!isAudioEnabled)} className={`flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold transition-all ${isAudioEnabled ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400'}`}>{isAudioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />} Áudio</button>
+                                        <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 transition-colors">{isDarkMode ? <Sun size={18} /> : <Moon size={18} />} Tema</button>
+                                    </div>
+
+                                    {!isAdmin ? (
+                                        <button onClick={() => { setView('login'); setIsMobileMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest py-3.5 mt-2 rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300 transition-colors"><Lock size={16} /> Acesso TI</button>
+                                    ) : (
+                                        <button onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest py-3.5 mt-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 dark:hover:text-red-400 transition-colors"><LogOut size={16} /> Sair do Sistema</button>
+                                    )}
+                                </div>
+                            </>
                         )}
                     </header>
 
