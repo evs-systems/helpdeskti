@@ -424,6 +424,32 @@
             };
         };
 
+        const chatMessageKey = (m) => m?.id || `${m?.timestamp || ''}|${m?.sender || ''}|${m?.text || ''}|${m?.image || ''}`;
+
+        const mergeChatMessages = (legacy = [], extra = []) => {
+            const byId = new Map();
+            for (const m of [...(legacy || []), ...(extra || [])]) {
+                if (!m || typeof m !== 'object') continue;
+                const key = chatMessageKey(m);
+                if (!key) continue;
+                byId.set(key, m.id ? m : { ...m, id: key });
+            }
+            return [...byId.values()].sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
+        };
+
+        const newChatMessageId = () => Date.now().toString() + Math.random().toString(36).substring(2, 9);
+
+        const pickLastGcMessage = (room) => room?.lastMessage || (room?.messages && room.messages.length ? room.messages[room.messages.length - 1] : null);
+
+        const gcRoomActivityTime = (room) => {
+            const last = pickLastGcMessage(room);
+            if (last?.timestamp) {
+                const t = new Date(last.timestamp).getTime();
+                if (!isNaN(t)) return t;
+            }
+            return room?.lastUpdated?.seconds ? room.lastUpdated.seconds * 1000 : 0;
+        };
+
         const formatDateBr = (dateString) => {
             if (!dateString) return 'Selecione';
             if (String(dateString).includes('/')) return dateString;
@@ -882,6 +908,8 @@
             const gcEndRef = useRef(null);
             const [gcMessageLimit, setGcMessageLimit] = useState(50);
             const [ticketMessageLimit, setTicketMessageLimit] = useState(50);
+            const [ticketThreadExtra, setTicketThreadExtra] = useState([]);
+            const [gcThreadExtra, setGcThreadExtra] = useState([]);
             const [editingGcMsgId, setEditingGcMsgId] = useState(null);
             const [editingGcMsgText, setEditingGcMsgText] = useState('');
             const [replyingToGcMsg, setReplyingToGcMsg] = useState(null);
@@ -1439,8 +1467,11 @@
             const notifyGcNewMessage = (docId, currentData, prevData) => {
                 const oldMsgs = prevData?.messages || [];
                 const newMsgs = currentData.messages || [];
-                if (newMsgs.length <= oldMsgs.length) return;
-                const lastMsg = newMsgs[newMsgs.length - 1];
+                let lastMsg = newMsgs.length > oldMsgs.length ? newMsgs[newMsgs.length - 1] : null;
+                if (!lastMsg && currentData.lastMessage && currentData.lastMessage.id !== prevData?.lastMessage?.id) {
+                    lastMsg = currentData.lastMessage;
+                }
+                if (!lastMsg) return;
                 let shouldNotify = false;
                 if (isAdmin) {
                     if (docId === 'internal_tech_room') {
@@ -1519,18 +1550,39 @@
                 return () => unsub();
             }, [user, isAdmin, techName, gcUser, profileReady]);
 
+            useEffect(() => {
+                if (!user) {
+                    setGcThreadExtra([]);
+                    return;
+                }
+                const roomId = isAdmin
+                    ? gcActiveRoom
+                    : (isGcOpen && gcUser?.unit && gcUser?.sector ? buildColaboradorProfile(gcUser.unit, gcUser.sector).roomId : null);
+                if (!roomId) {
+                    setGcThreadExtra([]);
+                    return;
+                }
+                const unsub = onSnapshot(collection(db, 'global_chats', roomId, 'messages'), (snap) => {
+                    setGcThreadExtra(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                }, (err) => {
+                    console.warn('Thread do chat global:', err);
+                    setGcThreadExtra([]);
+                });
+                return () => unsub();
+            }, [user, isAdmin, gcActiveRoom, gcUser, isGcOpen]);
+
             const hasGcUnreadGlobal = useMemo(() => {
                 if (isAdmin) {
                     return globalChats.some(room => {
                         if (room.id === 'internal_tech_room') return false;
-                        const lastMsg = room.messages?.[room.messages.length - 1];
+                        const lastMsg = pickLastGcMessage(room);
                         return lastMsg && lastMsg.senderRole === 'user' && lastMsg.timestamp > (gcReadTimes[room.id] || "0");
                     });
                 } else if (gcUser?.unit && gcUser?.sector) {
                     const roomId = buildColaboradorProfile(gcUser.unit, gcUser.sector).roomId;
                     const room = globalChats.find(c => c.id === roomId);
                     if (!room) return false;
-                    const lastMsg = room.messages?.[room.messages.length - 1];
+                    const lastMsg = pickLastGcMessage(room);
                     return lastMsg && lastMsg.senderRole === 'tech' && lastMsg.timestamp > (gcReadTimes[roomId] || "0");
                 }
                 return false;
@@ -1540,7 +1592,7 @@
                 if (isAdmin) {
                     const internalRoom = globalChats.find(c => c.id === 'internal_tech_room');
                     if (!internalRoom) return false;
-                    const lastMsg = internalRoom.messages?.[internalRoom.messages.length - 1];
+                    const lastMsg = pickLastGcMessage(internalRoom);
                     return lastMsg && lastMsg.sender !== techName && lastMsg.timestamp > (gcReadTimes['internal_tech_room'] || "0");
                 }
                 return false;
@@ -1572,7 +1624,7 @@
                     }
                 }
                 return () => { clearTimeout(timer1); clearTimeout(timer2); };
-            }, [isGcOpen, gcActiveRoom, globalChats, isAdmin, gcUser]);
+            }, [isGcOpen, gcActiveRoom, globalChats, isAdmin, gcUser, gcThreadExtra.length]);
 
             const persistColaboradorProfile = async (unit, sector) => {
                 const profile = buildColaboradorProfile(unit, sector);
@@ -1626,6 +1678,32 @@
                 }
             };
 
+            const persistThreadMessage = async (parentRef, threadPath, newMessage, arrayField, legacyExtras, bumpExtras) => {
+                let threadOk = false;
+                let parentOk = false;
+                try {
+                    await setDoc(doc(db, ...threadPath, newMessage.id), newMessage);
+                    threadOk = true;
+                } catch (err) {
+                    console.warn('Subcoleção de chat:', err);
+                }
+                try {
+                    await updateDoc(parentRef, { [arrayField]: arrayUnion(newMessage), ...legacyExtras });
+                    parentOk = true;
+                } catch (err) {
+                    try {
+                        await updateDoc(parentRef, bumpExtras);
+                        parentOk = true;
+                    } catch (err2) {
+                        if (!threadOk) throw err;
+                        console.warn('Array do chat (documento cheio ou permissão):', err);
+                    }
+                }
+                if (parentOk && bumpExtras) {
+                    try { await updateDoc(parentRef, bumpExtras); } catch (err) { console.warn('Campo lastMessage:', err); }
+                }
+            };
+
             const handleSendGcMessage = async (e) => {
                 e.preventDefault();
                 const input = e.target.gcMsgInput;
@@ -1636,7 +1714,7 @@
                 const roomName = isAdmin ? (roomId === 'internal_tech_room' ? 'Chat Interno TI' : globalChats.find(c => c.id === roomId)?.name || roomId) : `${formatDisplay(gcUser.unit)} - ${formatDisplay(gcUser.sector)}`;
                 
                 const newMessage = {
-                    id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+                    id: newChatMessageId(),
                     text,
                     sender: isAdmin ? techName : gcUser.name,
                     senderRole: isAdmin ? 'tech' : 'user',
@@ -1659,11 +1737,17 @@
                 const roomExists = globalChats.some(c => c.id === roomId);
                 
                 try {
-                    if (roomExists) {
-                        await updateDoc(docRef, { messages: arrayUnion(newMessage), lastUpdated: serverTimestamp() });
-                    } else {
-                        await setDoc(docRef, { unit: isAdmin ? 'TI' : gcUser.unit, sector: isAdmin ? 'Interno' : gcUser.sector, name: roomName, messages: [newMessage], createdAt: serverTimestamp(), lastUpdated: serverTimestamp() });
+                    if (!roomExists) {
+                        await setDoc(docRef, { unit: isAdmin ? 'TI' : gcUser.unit, sector: isAdmin ? 'Interno' : gcUser.sector, name: roomName, messages: [newMessage], lastMessage: newMessage, createdAt: serverTimestamp(), lastUpdated: serverTimestamp() });
                     }
+                    await persistThreadMessage(
+                        docRef,
+                        ['global_chats', roomId, 'messages'],
+                        newMessage,
+                        'messages',
+                        { lastUpdated: serverTimestamp() },
+                        { lastUpdated: serverTimestamp(), lastMessage: newMessage }
+                    );
                     markGcAsRead(roomId);
                     setTimeout(() => gcEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
                 } catch (error) { showToast("Erro ao enviar mensagem", "error"); }
@@ -1672,6 +1756,15 @@
             const handleEditGcMessageSubmit = async (e, roomId, msgId) => {
                 e.preventDefault();
                 if (!editingGcMsgText.trim()) return;
+                const editedText = editingGcMsgText.trim();
+                const editedAt = new Date().toISOString();
+                let threadOk = false;
+                try {
+                    await updateDoc(doc(db, 'global_chats', roomId, 'messages', msgId), { text: editedText, editedAt });
+                    threadOk = true;
+                } catch (err) {
+                    console.warn('Edição na subcoleção:', err);
+                }
                 try {
                     await runTransaction(db, async (transaction) => {
                         const docRef = doc(db, 'global_chats', roomId);
@@ -1679,13 +1772,20 @@
                         if (!snap.exists()) return;
                         const currentMessages = snap.data().messages || [];
                         const updatedMessages = currentMessages.map(m => 
-                            m.id === msgId ? { ...m, text: editingGcMsgText.trim(), editedAt: new Date().toISOString() } : m
+                            m.id === msgId ? { ...m, text: editedText, editedAt } : m
                         );
                         transaction.update(docRef, { messages: updatedMessages });
                     });
                     setEditingGcMsgId(null);
                     setEditingGcMsgText('');
-                } catch (error) { showToast("Erro ao editar mensagem", "error"); }
+                } catch (error) {
+                    if (threadOk) {
+                        setEditingGcMsgId(null);
+                        setEditingGcMsgText('');
+                    } else {
+                        showToast("Erro ao editar mensagem", "error");
+                    }
+                }
             };
 
             const requestNotificationPermission = async () => {
@@ -1846,11 +1946,15 @@
                             if (change.type === "modified" && prevData) {
                                 const oldMsgs = prevData.messages || [];
                                 const newMsgs = currentData.messages || [];
-                                const lastMsg = newMsgs.length > oldMsgs.length ? newMsgs[newMsgs.length - 1] : null;
+                                const lastMsg = newMsgs.length > oldMsgs.length
+                                    ? newMsgs[newMsgs.length - 1]
+                                    : (currentData.lastPublicMessage && currentData.lastPublicMessage.timestamp !== prevData.lastPublicMessage?.timestamp ? currentData.lastPublicMessage : null);
 
                                 const oldInternalMsgs = prevData.internalMessages || [];
                                 const newInternalMsgs = currentData.internalMessages || [];
-                                const lastInternalMsg = newInternalMsgs.length > oldInternalMsgs.length ? newInternalMsgs[newInternalMsgs.length - 1] : null;
+                                const lastInternalMsg = newInternalMsgs.length > oldInternalMsgs.length
+                                    ? newInternalMsgs[newInternalMsgs.length - 1]
+                                    : (currentData.lastInternalMessage && currentData.lastInternalMessage.timestamp !== prevData.lastInternalMessage?.timestamp ? currentData.lastInternalMessage : null);
 
                                 if (isAdmin) {
                                     if (lastMsg && lastMsg.senderRole === 'user') {
@@ -1897,6 +2001,25 @@
                 });
                 return () => { isSubscribedLoad = false; unsubscribe(); };
             }, [user, isAdmin, techName, userSector, userUnit, profileReady]);
+
+            useEffect(() => {
+                if (!user || !expandedChatId) {
+                    setTicketThreadExtra([]);
+                    return;
+                }
+                if (activeChatTab === 'internal' && !isAdmin) {
+                    setTicketThreadExtra([]);
+                    return;
+                }
+                const thread = activeChatTab === 'internal' ? 'internal_messages' : 'messages';
+                const unsub = onSnapshot(collection(db, 'chamados', expandedChatId, thread), (snap) => {
+                    setTicketThreadExtra(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                }, (err) => {
+                    console.warn('Thread do chamado:', err);
+                    setTicketThreadExtra([]);
+                });
+                return () => unsub();
+            }, [user, expandedChatId, activeChatTab, isAdmin]);
 
             useEffect(() => {
                 if (!isAdmin || !user) { setEquipments([]); setAccessories([]); setCameras([]); setKanbanCards([]); setKbCards([]); setChecklists([]); return; }
@@ -1953,21 +2076,24 @@
                 if (expandedChatId === ticket.id && activeChatTab === 'public') return false;
                 const lastRead = lastReadTimes[`${ticket.id}_public`] || "0";
                 const targetRole = isAdmin ? 'user' : 'tech';
-                return (ticket.messages || []).some(m => m.senderRole === targetRole && m.timestamp > lastRead);
+                const extra = expandedChatId === ticket.id ? ticketThreadExtra : (ticket.lastPublicMessage ? [ticket.lastPublicMessage] : []);
+                return mergeChatMessages(ticket.messages, extra).some(m => m.senderRole === targetRole && m.timestamp > lastRead);
             };
 
             const hasUnreadInternal = (ticket) => {
                 if (!isAdmin) return false;
                 if (expandedChatId === ticket.id && activeChatTab === 'internal') return false;
                 const lastRead = lastReadTimes[`${ticket.id}_internal`] || "0";
-                return (ticket.internalMessages || []).some(m => m.senderRole === 'tech' && m.sender !== techName && m.timestamp > lastRead);
+                const extra = expandedChatId === ticket.id && activeChatTab === 'internal' ? ticketThreadExtra : (ticket.lastInternalMessage ? [ticket.lastInternalMessage] : []);
+                return mergeChatMessages(ticket.internalMessages, extra).some(m => m.senderRole === 'tech' && m.sender !== techName && m.timestamp > lastRead);
             };
 
             useEffect(() => {
                 if (expandedChatId && activeChatTab) {
                     const ticket = tickets.find(t => t.id === expandedChatId);
                     if (ticket) {
-                        const messages = activeChatTab === 'internal' ? ticket.internalMessages : ticket.messages;
+                        const legacy = activeChatTab === 'internal' ? ticket.internalMessages : ticket.messages;
+                        const messages = mergeChatMessages(legacy, ticketThreadExtra);
                         if (messages && messages.length > 0) {
                             const lastMsgTimestamp = messages[messages.length - 1].timestamp;
                             setLastReadTimes(prev => {
@@ -1978,7 +2104,7 @@
                         }
                     }
                 }
-            }, [tickets, expandedChatId, activeChatTab]);
+            }, [tickets, expandedChatId, activeChatTab, ticketThreadExtra]);
 
             // NOVO EFEITO: Rolagem automática restrita ao chat interno e público do chamado 
             useEffect(() => {
@@ -1991,7 +2117,7 @@
                     }
                 }, 150);
                 return () => clearTimeout(timer);
-            }, [expandedChatId, activeChatTab, tickets.find(t => t.id === expandedChatId)?.messages?.length, tickets.find(t => t.id === expandedChatId)?.internalMessages?.length]);
+            }, [expandedChatId, activeChatTab, tickets.find(t => t.id === expandedChatId)?.messages?.length, tickets.find(t => t.id === expandedChatId)?.internalMessages?.length, ticketThreadExtra.length]);
             const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
                 return new Promise((resolve) => {
                     if (file.size < 500 * 1024) { resolve(file); return; } // < 500KB, não comprimir
@@ -2059,7 +2185,9 @@
             };
 
             const openImageViewer = (imgSrc, ticket) => {
-                const msgs = activeChatTab === 'internal' ? ticket.internalMessages : ticket.messages;
+                const legacy = activeChatTab === 'internal' ? ticket.internalMessages : ticket.messages;
+                const extra = expandedChatId === ticket.id ? ticketThreadExtra : [];
+                const msgs = mergeChatMessages(legacy, extra);
                 const images = (msgs || []).filter(m => m.image).map(m => m.image);
                 const index = images.indexOf(imgSrc);
                 if (index !== -1) setImageView({ isOpen: true, images: images, currentIndex: index });
@@ -2993,9 +3121,18 @@
                         uploadedRef = snapshot.ref;
                         imageUrl = await getDownloadURL(snapshot.ref);
                     }
-                    const newMessage = { text: text, sender: isAdmin ? techName : ticket?.requester || "Usuário", senderRole: isAdmin ? 'tech' : 'user', timestamp: new Date().toISOString() };
+                    const newMessage = { id: newChatMessageId(), text: text, sender: isAdmin ? techName : ticket?.requester || "Usuário", senderRole: isAdmin ? 'tech' : 'user', timestamp: new Date().toISOString() };
                     if (imageUrl) newMessage.image = imageUrl;
-                    await updateDoc(doc(db, 'chamados', ticketId), { [isInternal ? 'internalMessages' : 'messages']: arrayUnion(newMessage), updatedAt: serverTimestamp() });
+                    const arrayField = isInternal ? 'internalMessages' : 'messages';
+                    const bumpField = isInternal ? 'lastInternalMessage' : 'lastPublicMessage';
+                    await persistThreadMessage(
+                        doc(db, 'chamados', ticketId),
+                        ['chamados', ticketId, isInternal ? 'internal_messages' : 'messages'],
+                        newMessage,
+                        arrayField,
+                        { updatedAt: serverTimestamp() },
+                        { updatedAt: serverTimestamp(), [bumpField]: newMessage }
+                    );
                     markAsRead(ticketId, isInternal ? 'internal' : 'public'); setChatImageFile(null); setChatImagePreview(null);
                 } catch (error) {
                     if (uploadedRef) { try { await deleteObject(uploadedRef); } catch(e) {} }
@@ -4308,6 +4445,10 @@
                                         const status = STATUS_OPTIONS.find(s => s.id === ticket.status) || STATUS_OPTIONS[0];
                                         const priority = PRIORITY_OPTIONS.find(p => p.id === ticket.priority) || PRIORITY_OPTIONS[0];
                                         const isExpanded = expandedChatId === ticket.id;
+                                        const threadMessages = mergeChatMessages(
+                                            activeChatTab === 'internal' ? ticket.internalMessages : ticket.messages,
+                                            isExpanded ? ticketThreadExtra : []
+                                        );
                                         const hasPublicUnread = hasUnreadMessages(ticket);
                                         const hasInternalUnread = hasUnreadInternal(ticket);
                                         const StatusIcon = status.icon;
@@ -4440,14 +4581,14 @@
                                                     {isAdmin && (<div className="flex bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl"><button onClick={() => { setActiveChatTab('public'); markAsRead(ticket.id, 'public'); }} className={`relative px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${activeChatTab === 'public' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>Público{hasPublicUnread && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></div>}</button><button onClick={() => { setActiveChatTab('internal'); markAsRead(ticket.id, 'internal'); }} className={`relative px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 ${activeChatTab === 'internal' ? 'bg-white dark:bg-slate-700 text-orange-600 dark:text-orange-400 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}><EyeOff size={12} /> Interno{hasInternalUnread && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></div>}</button></div>)}
                                                     </div>
                                                     <div id="ticket-chat-container" className={`rounded-3xl p-4 mb-4 max-h-[400px] overflow-y-auto space-y-4 shadow-inner scroll-smooth custom-scrollbar ${activeChatTab === 'internal' ? 'bg-orange-50/50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-900/30 border' : 'bg-slate-100/50 dark:bg-slate-950/30'}`}>
-                                                    {((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages)?.length > 0 ? (
+                                                    {threadMessages.length > 0 ? (
                                                         <>
-                                                        {((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages).length > ticketMessageLimit && (
+                                                        {threadMessages.length > ticketMessageLimit && (
                                                             <div className="flex justify-center pb-2">
                                                                 <button onClick={() => setTicketMessageLimit(prev => prev + 50)} className="px-4 py-1.5 bg-slate-200/50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors shadow-sm">Carregar anteriores</button>
                                                             </div>
                                                         )}
-                                                        {((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages).slice(Math.max(0, ((activeChatTab === 'internal') ? ticket.internalMessages : ticket.messages).length - ticketMessageLimit)).map((m, idx) => {
+                                                        {threadMessages.slice(Math.max(0, threadMessages.length - ticketMessageLimit)).map((m, idx) => {
                                                         const isInternal = activeChatTab === 'internal';
                                                         const isMe = isAdmin ? (isInternal ? m.sender === techName : m.senderRole === 'tech') : m.senderRole === 'user';
                                                         
@@ -4459,7 +4600,7 @@
                                                         }
 
                                                         return (
-                                                            <div key={idx} className={`flex flex-col ${alignmentClass} animate-in fade-in slide-in-from-bottom-2`}>
+                                                            <div key={m.id || idx} className={`flex flex-col ${alignmentClass} animate-in fade-in slide-in-from-bottom-2`}>
                                                                 <span className="text-[10px] font-bold text-slate-400 mb-1 px-2">{m.sender} • {formatTimestamp({toDate: () => new Date(m.timestamp)})}</span>
                                                                 <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm transition-all overflow-hidden ${bubbleClass}`}>
                                                                     {m.image && (<div className="mb-2 -mx-2 -mt-2 group relative cursor-zoom-in" onClick={() => openImageViewer(m.image, ticket)}><img src={m.image} alt="Anexo" className="w-full h-auto rounded-t-xl max-h-60 object-cover" /><div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center"><Maximize2 className="text-white opacity-0 group-hover:opacity-100 drop-shadow-md" size={24} /></div></div>)}
@@ -4542,7 +4683,7 @@
                                             {/* Chat Interno da Equipe TI */}
                                             {(() => {
                                                 const internalRoom = globalChats.find(c => c.id === 'internal_tech_room');
-                                                const lastMsg = internalRoom?.messages?.[internalRoom.messages.length - 1];
+                                                const lastMsg = pickLastGcMessage(internalRoom);
                                                 const isUnread = lastMsg && lastMsg.sender !== techName && lastMsg.timestamp > (gcReadTimes['internal_tech_room'] || "0");
                                                 return (
                                                     <button onClick={() => { setGcActiveRoom('internal_tech_room'); markGcAsRead('internal_tech_room'); }} className="w-full text-left p-3 rounded-2xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800/50 hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-all flex items-center justify-between group shadow-sm">
@@ -4564,12 +4705,8 @@
                                             {globalChats.filter(c => c.id !== 'internal_tech_room').length === 0 ? (
                                                 <div className="py-8 text-center text-slate-400 opacity-60"><MessageCircle size={24} className="mx-auto mb-2"/><p className="text-[10px] font-bold uppercase tracking-widest">Nenhuma Conversa</p></div>
                                             ) : (
-                                                globalChats.filter(c => c.id !== 'internal_tech_room').sort((a, b) => {
-                                                    const timeA = a.messages?.length > 0 ? new Date(a.messages[a.messages.length - 1].timestamp).getTime() : (a.lastUpdated?.seconds ? a.lastUpdated.seconds * 1000 : 0);
-                                                    const timeB = b.messages?.length > 0 ? new Date(b.messages[b.messages.length - 1].timestamp).getTime() : (b.lastUpdated?.seconds ? b.lastUpdated.seconds * 1000 : 0);
-                                                    return timeB - timeA;
-                                                }).map(room => {
-                                                    const lastMsg = room.messages?.[room.messages.length - 1];
+                                                globalChats.filter(c => c.id !== 'internal_tech_room').sort((a, b) => gcRoomActivityTime(b) - gcRoomActivityTime(a)).map(room => {
+                                                    const lastMsg = pickLastGcMessage(room);
                                                     const isUnread = lastMsg && lastMsg.senderRole === 'user' && lastMsg.timestamp > (gcReadTimes[room.id] || "0");
                                                     return (
                                                         <button key={room.id} onClick={() => { setGcActiveRoom(room.id); markGcAsRead(room.id); }} className="w-full text-left p-3 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center justify-between group border border-transparent hover:border-slate-200 dark:hover:border-slate-700 bg-white dark:bg-slate-900 shadow-sm mb-1">
@@ -4592,10 +4729,11 @@
                                                 {(() => {
                                                     const activeRoomId = isAdmin ? gcActiveRoom : buildColaboradorProfile(gcUser.unit, gcUser.sector).roomId;
                                                     const roomData = globalChats.find(c => c.id === activeRoomId);
-                                                    if (!roomData || !roomData.messages || roomData.messages.length === 0) return <p className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-10">Envie a primeira mensagem</p>;
+                                                    const threadMessages = mergeChatMessages(roomData?.messages, gcThreadExtra);
+                                                    if (threadMessages.length === 0) return <p className="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-10">Envie a primeira mensagem</p>;
                                                     
-                                                    const totalMsgs = roomData.messages.length;
-                                                    const messagesToShow = roomData.messages.slice(Math.max(0, totalMsgs - gcMessageLimit));
+                                                    const totalMsgs = threadMessages.length;
+                                                    const messagesToShow = threadMessages.slice(Math.max(0, totalMsgs - gcMessageLimit));
 
                                                     return (
                                                         <>
