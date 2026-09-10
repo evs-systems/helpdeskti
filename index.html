@@ -445,6 +445,8 @@
             return [...byId.values()].sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
         };
 
+        const isChatArrayCleared = (prevArr, nextArr) => (prevArr || []).length > 0 && (nextArr || []).length === 0;
+
         const stableChatMessageId = (m) => {
             if (m?.id && typeof m.id === 'string' && m.id.length > 0 && m.id.length < 80) return m.id;
             const key = chatMessageKey(m);
@@ -1559,6 +1561,7 @@
             }, [gcUser]);
 
             const notifyGcNewMessage = (docId, currentData, prevData) => {
+                if (isChatArrayCleared(prevData?.messages, currentData.messages)) return;
                 const oldMsgs = prevData?.messages || [];
                 const newMsgs = currentData.messages || [];
                 let lastMsg = newMsgs.length > oldMsgs.length ? newMsgs[newMsgs.length - 1] : null;
@@ -2033,15 +2036,19 @@
                             if (change.type === "modified" && prevData) {
                                 const oldMsgs = prevData.messages || [];
                                 const newMsgs = currentData.messages || [];
-                                const lastMsg = newMsgs.length > oldMsgs.length
-                                    ? newMsgs[newMsgs.length - 1]
-                                    : (currentData.lastPublicMessage && currentData.lastPublicMessage.timestamp !== prevData.lastPublicMessage?.timestamp ? currentData.lastPublicMessage : null);
+                                const lastMsg = isChatArrayCleared(oldMsgs, newMsgs)
+                                    ? null
+                                    : (newMsgs.length > oldMsgs.length
+                                        ? newMsgs[newMsgs.length - 1]
+                                        : (currentData.lastPublicMessage && currentData.lastPublicMessage.timestamp !== prevData.lastPublicMessage?.timestamp ? currentData.lastPublicMessage : null));
 
                                 const oldInternalMsgs = prevData.internalMessages || [];
                                 const newInternalMsgs = currentData.internalMessages || [];
-                                const lastInternalMsg = newInternalMsgs.length > oldInternalMsgs.length
-                                    ? newInternalMsgs[newInternalMsgs.length - 1]
-                                    : (currentData.lastInternalMessage && currentData.lastInternalMessage.timestamp !== prevData.lastInternalMessage?.timestamp ? currentData.lastInternalMessage : null);
+                                const lastInternalMsg = isChatArrayCleared(oldInternalMsgs, newInternalMsgs)
+                                    ? null
+                                    : (newInternalMsgs.length > oldInternalMsgs.length
+                                        ? newInternalMsgs[newInternalMsgs.length - 1]
+                                        : (currentData.lastInternalMessage && currentData.lastInternalMessage.timestamp !== prevData.lastInternalMessage?.timestamp ? currentData.lastInternalMessage : null));
 
                                 if (isAdmin) {
                                     if (lastMsg && lastMsg.senderRole === 'user') {
