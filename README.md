@@ -32,6 +32,7 @@ O HelpDesk TI é uma plataforma projetada para centralizar e otimizar a operaç�
 
 ### 🌐 Chat Global (Suporte Rápido)
 - Canal de comunicação direta entre **setores/unidades** e a equipe de TI.
+- A sala do colaborador segue a **mesma unidade e setor** informados no painel (Trocar Dados troca a fila e a sala).
 - **Chat interno exclusivo** entre técnicos para discussões privadas.
 - Sistema de salas automáticas organizadas por Unidade + Setor.
 - Respostas com citação (reply), edição de mensagens e separador de datas.
