@@ -185,7 +185,7 @@
             CircleCheckBig as CheckCircle2, ChevronUp, LayoutDashboard, LayoutGrid, List, Paperclip as Attachment, Database as Inventory, Kanban as Board, CheckSquare as Checklist, BookOpen as KB, Camera
         } from 'lucide-react';
         import { initializeApp, getApps, getApp } from 'firebase/app';
-        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, arrayUnion, deleteDoc, setDoc, runTransaction, writeBatch } from 'firebase/firestore';
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, arrayUnion, deleteDoc, setDoc, runTransaction, writeBatch, query, where } from 'firebase/firestore';
         import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
         import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
         import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
@@ -1354,71 +1354,86 @@
                 }
             }, [gcUser]);
 
+            const notifyGcNewMessage = (docId, currentData, prevData) => {
+                const oldMsgs = prevData?.messages || [];
+                const newMsgs = currentData.messages || [];
+                if (newMsgs.length <= oldMsgs.length) return;
+                const lastMsg = newMsgs[newMsgs.length - 1];
+                let shouldNotify = false;
+                if (isAdmin) {
+                    if (docId === 'internal_tech_room') {
+                        if (lastMsg.sender !== techName) shouldNotify = true;
+                    } else if (lastMsg.senderRole === 'user') {
+                        shouldNotify = true;
+                    }
+                } else if (lastMsg.senderRole === 'tech') {
+                    shouldNotify = true;
+                }
+                const { isOpen, room } = gcStateRef.current;
+                const isCurrentlyViewing = isOpen && (isAdmin ? room === docId : true);
+                if (shouldNotify && (!isCurrentlyViewing || document.hidden)) {
+                    playSound('update');
+                    const roomName = docId === 'internal_tech_room' ? 'Chat Interno TI' : (currentData.name || 'Chat Global');
+                    showSystemNotification(`💬 ${roomName}`, `${lastMsg.sender}: ${lastMsg.text}`);
+                    if (!document.hidden) {
+                        showToast(`Nova mensagem de ${lastMsg.sender}`, 'info', {
+                            label: 'Ver Chat',
+                            onClick: () => {
+                                setIsGcOpen(true);
+                                if (isAdmin) setGcActiveRoom(docId);
+                            }
+                        });
+                    }
+                }
+            };
+
             // Global Chat Effect
             useEffect(() => {
                 if (!user) return;
-                let isInitialLoad = true;
-                const prevGlobalChats = {};
-                const unsub = onSnapshot(collection(db, 'global_chats'), (snapshot) => {
-                    const chats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    
-                    if (!isInitialLoad) {
-                        snapshot.docChanges().forEach((change) => {
-                            const docId = change.doc.id;
-                            const currentData = change.doc.data();
-                            const prevData = prevGlobalChats[docId];
-
-                            if (change.type === "added" || change.type === "modified") {
-                                const oldMsgs = prevData?.messages || [];
-                                const newMsgs = currentData.messages || [];
-                                
-                                if (newMsgs.length > oldMsgs.length) {
-                                    const lastMsg = newMsgs[newMsgs.length - 1];
-                                    
-                                    let shouldNotify = false;
-                                    if (isAdmin) {
-                                        if (docId === 'internal_tech_room') {
-                                            if (lastMsg.sender !== techName) shouldNotify = true;
-                                        } else {
-                                            if (lastMsg.senderRole === 'user') shouldNotify = true;
-                                        }
-                                    } else if (gcUser) {
-                                        const myRoomId = `${normalizeSearch(gcUser.unit)}_${normalizeSearch(gcUser.sector)}`;
-                                        if (docId === myRoomId && lastMsg.senderRole === 'tech') shouldNotify = true;
-                                    }
-
-                                    const { isOpen, room } = gcStateRef.current;
-                                    const isCurrentlyViewing = isOpen && (isAdmin ? room === docId : true);
-
-                                    if (shouldNotify && (!isCurrentlyViewing || document.hidden)) {
-                                        playSound('update');
-                                        const roomName = docId === 'internal_tech_room' ? 'Chat Interno TI' : (currentData.name || 'Chat Global');
-                                        showSystemNotification(`💬 ${roomName}`, `${lastMsg.sender}: ${lastMsg.text}`);
-                                        
-                                        if (!document.hidden) {
-                                            showToast(`Nova mensagem de ${lastMsg.sender}`, 'info', { 
-                                                label: 'Ver Chat', 
-                                                onClick: () => { 
-                                                    setIsGcOpen(true); 
-                                                    if (isAdmin) setGcActiveRoom(docId); 
-                                                } 
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                            prevGlobalChats[docId] = currentData;
-                        });
-                    } else {
-                        snapshot.docs.forEach(doc => { prevGlobalChats[doc.id] = doc.data(); });
-                        isInitialLoad = false;
+                const onGcError = (err) => {
+                    console.warn("Erro no chat global:", err);
+                    if (err.code === 'permission-denied') {
+                        showToast(isAdmin ? "Sem permissão no chat global. Verifique a conta de técnico." : "Sem permissão neste chat.", "warning");
                     }
-                    
-                    setGlobalChats(chats);
-                }, (err) => { 
-                    console.warn("Erro no chat global:", err); 
-                    if(err.code === 'permission-denied' && isAdmin) showToast("Adicione regras no Firebase para a coleção global_chats", "warning"); 
-                });
+                };
+                if (isAdmin) {
+                    let isInitialLoad = true;
+                    const prevGlobalChats = {};
+                    const unsub = onSnapshot(collection(db, 'global_chats'), (snapshot) => {
+                        const chats = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                        if (!isInitialLoad) {
+                            snapshot.docChanges().forEach((change) => {
+                                const docId = change.doc.id;
+                                const currentData = change.doc.data();
+                                if (change.type === "added" || change.type === "modified") {
+                                    notifyGcNewMessage(docId, currentData, prevGlobalChats[docId]);
+                                }
+                                prevGlobalChats[docId] = currentData;
+                            });
+                        } else {
+                            snapshot.docs.forEach(d => { prevGlobalChats[d.id] = d.data(); });
+                            isInitialLoad = false;
+                        }
+                        setGlobalChats(chats);
+                    }, onGcError);
+                    return () => unsub();
+                }
+                if (!gcUser?.unit || !gcUser?.sector) {
+                    setGlobalChats([]);
+                    return;
+                }
+                const roomId = `${normalizeSearch(gcUser.unit)}_${normalizeSearch(gcUser.sector)}`;
+                let isInitialLoad = true;
+                let prevRoomData = null;
+                const unsub = onSnapshot(doc(db, 'global_chats', roomId), (snap) => {
+                    const currentData = snap.exists() ? snap.data() : null;
+                    if (!isInitialLoad && currentData) {
+                        notifyGcNewMessage(roomId, currentData, prevRoomData);
+                    }
+                    prevRoomData = currentData;
+                    isInitialLoad = false;
+                    setGlobalChats(currentData ? [{ id: snap.id, ...currentData }] : []);
+                }, onGcError);
                 return () => unsub();
             }, [user, isAdmin, techName, gcUser]);
 
@@ -1691,7 +1706,9 @@
             useEffect(() => {
                 if (!user) return;
                 if (!isAdmin && (!userSector || !userUnit)) return;
-                const ticketsRef = collection(db, 'chamados');
+                const ticketsRef = isAdmin
+                    ? collection(db, 'chamados')
+                    : query(collection(db, 'chamados'), where('unit', '==', userUnit));
                 let isSubscribedLoad = true;
                 
                 const unsubscribe = onSnapshot(ticketsRef, (snapshot) => {
@@ -1783,7 +1800,7 @@
                 }, (error) => {
                     if (error.code === 'permission-denied') {
                         safeSetState(setKanbanCards, []);
-                        setFirebaseError({ title: "Acesso ao Kanban/KB/Checklists/Avisos Bloqueado", message: "Adicione as regras das novas coleções no seu Console Firebase (Firestore > Regras).", code: `match /kanban_cards/{doc=**} {\n  allow read, write: if request.auth != null;\n}\nmatch /kb_cards/{doc=**} {\n  allow read, write: if request.auth != null;\n}\nmatch /checklists/{doc=**} {\n  allow read, write: if request.auth != null;\n}\nmatch /avisos/{doc=**} {\n  allow read, write: if request.auth != null;\n}\nmatch /cameras/{doc=**} {\n  allow read, write: if request.auth != null;\n}` });
+                        setFirebaseError({ title: "Acesso às ferramentas de TI bloqueado", message: "Esta sessão não tem permissão de técnico. Entre com a conta da equipe de TI." });
                     }
                 });
 
