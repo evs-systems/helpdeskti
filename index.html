@@ -83,10 +83,18 @@
             };
             img.src = svgUrl;
 
-            // Service Worker para habilitar função PWA e instalar no PC
-            const swCode = `self.addEventListener('install', (e) => { self.skipWaiting(); }); self.addEventListener('activate', (e) => { e.waitUntil(clients.claim()); }); self.addEventListener('fetch', (e) => { });`;
-            const swUrl = URL.createObjectURL(new Blob([swCode], {type: 'text/javascript'}));
-            // if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register(swUrl).catch(err => console.warn('PWA SW falhou', err)); }); }
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.getRegistrations().then((regs) => {
+                        regs.forEach((reg) => {
+                            const url = (reg.active || reg.waiting || reg.installing)?.scriptURL || '';
+                            if (url && !url.endsWith('/sw.js')) reg.unregister();
+                        });
+                    }).finally(() => {
+                        navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('PWA SW falhou', err));
+                    });
+                });
+            }
         })();
     </script>
     
