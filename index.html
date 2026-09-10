@@ -185,7 +185,7 @@
             CircleCheckBig as CheckCircle2, ChevronUp, LayoutDashboard, LayoutGrid, List, Paperclip as Attachment, Database as Inventory, Kanban as Board, CheckSquare as Checklist, BookOpen as KB, Camera
         } from 'lucide-react';
         import { initializeApp, getApps, getApp } from 'firebase/app';
-        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, arrayUnion, deleteDoc, setDoc, runTransaction } from 'firebase/firestore';
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, serverTimestamp, arrayUnion, deleteDoc, setDoc, runTransaction, writeBatch } from 'firebase/firestore';
         import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
         import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
         import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
@@ -221,6 +221,69 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
         const storage = getStorage(app);
+
+        const storagePathFromUrl = (url) => {
+            if (!url || typeof url !== 'string') return '';
+            const trimmed = url.trim();
+            if (!trimmed) return '';
+            if (trimmed.startsWith('gs://')) {
+                const withoutScheme = trimmed.slice(5);
+                const slash = withoutScheme.indexOf('/');
+                return slash === -1 ? '' : decodeURIComponent(withoutScheme.slice(slash + 1));
+            }
+            try {
+                const parsed = new URL(trimmed);
+                const match = parsed.pathname.match(/\/v0\/b\/[^/]+\/o\/(.+)$/);
+                if (match) return decodeURIComponent(match[1]);
+            } catch (e) {}
+            return '';
+        };
+
+        const isAllowedStoragePath = (path) => {
+            if (!path || typeof path !== 'string') return false;
+            const normalized = path.replace(/^\/+/, '');
+            if (normalized.includes('..')) return false;
+            return /^(?:kanban_cards_attachments|kb_cards_attachments|attachments)\//.test(normalized);
+        };
+
+        const deleteStorageAttachment = async (attachment) => {
+            if (!attachment) return;
+            const storedPath = attachment.path && String(attachment.path).trim();
+            const path = storedPath || storagePathFromUrl(attachment.url);
+            if (!isAllowedStoragePath(path)) return;
+            await deleteObject(ref(storage, path));
+        };
+
+        const parseCSVRow = (str) => { let res = []; let inQ = false; let cur = ''; for(let i=0; i<str.length; i++) { let c = str[i]; if(c === '"' && str[i+1] === '"') { cur += '"'; i++; } else if(c === '"') { inQ = !inQ; } else if(c === ';' && !inQ) { res.push(cur); cur = ''; } else { cur += c; } } res.push(cur); return res; };
+
+        const INVENTORY_CSV_CHUNK = 40;
+        const yieldToUi = () => new Promise((resolve) => setTimeout(resolve, 0));
+        const commitInventoryWrites = async (ops) => {
+            if (!ops.length) return;
+            for (let i = 0; i < ops.length; i += INVENTORY_CSV_CHUNK) {
+                const chunk = ops.slice(i, i + INVENTORY_CSV_CHUNK);
+                try {
+                    const batch = writeBatch(db);
+                    for (const op of chunk) {
+                        if (op.type === 'update') {
+                            batch.update(doc(db, op.collectionName, op.id), op.data);
+                        } else {
+                            batch.set(doc(collection(db, op.collectionName)), op.data);
+                        }
+                    }
+                    await batch.commit();
+                } catch (chunkErr) {
+                    for (const op of chunk) {
+                        if (op.type === 'update') {
+                            await updateDoc(doc(db, op.collectionName, op.id), op.data);
+                        } else {
+                            await addDoc(collection(db, op.collectionName), op.data);
+                        }
+                    }
+                }
+                if (i + INVENTORY_CSV_CHUNK < ops.length) await yieldToUi();
+            }
+        };
 
         const SOUND_NEW_TICKET = "https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"; 
         const SOUND_UPDATE = "https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3"; 
@@ -1878,7 +1941,7 @@
                     const storageRef = ref(storage, `${collectionName}_attachments/${folderId}/${Date.now()}_${file.name}`);
                     const snapshot = await uploadBytes(storageRef, file);
                     const url = await getDownloadURL(snapshot.ref);
-                    const newAttachment = { name: file.name, url, type: file.type };
+                    const newAttachment = { name: file.name, url, type: file.type, path: snapshot.ref.fullPath };
                     if (currentData.id) {
                         await updateDoc(doc(db, collectionName, currentData.id), { attachments: arrayUnion(newAttachment), updatedAt: serverTimestamp() });
                     }
@@ -1893,8 +1956,8 @@
                     onConfirm: async () => {
                         setIsSubmitting(true);
                         try {
-                            if (attachmentToRemove.url && attachmentToRemove.url.includes('firebasestorage.googleapis.com')) {
-                                try { await deleteObject(ref(storage, attachmentToRemove.url)); } catch (e) { console.warn("Erro ao deletar arquivo do storage", e); }
+                            if (attachmentToRemove.url && (attachmentToRemove.path || attachmentToRemove.url.includes('firebasestorage.googleapis.com'))) {
+                                try { await deleteStorageAttachment(attachmentToRemove); } catch (e) { console.warn("Erro ao deletar arquivo do storage", e); }
                             }
                             const newAttachments = (currentData.attachments || []).filter(a => a.url !== attachmentToRemove.url);
                             if (currentData.id) {
@@ -2248,10 +2311,10 @@
                         const text = event.target.result;
                         const lines = text.split('\n').filter(line => line.trim() !== '');
                         if (lines.length < 2) { showToast("CSV vazio ou inválido.", "error"); setIsSubmitting(false); return; }
-                        const parseCSVRow = (str) => { let res = []; let inQ = false; let cur = ''; for(let i=0; i<str.length; i++) { let c = str[i]; if(c === '"' && str[i+1] === '"') { cur += '"'; i++; } else if(c === '"') { inQ = !inQ; } else if(c === ';' && !inQ) { res.push(cur); cur = ''; } else { cur += c; } } res.push(cur); return res; };
                         const headers = parseCSVRow(lines[0].trim());
                         let createdCount = 0;
                         let updatedCount = 0;
+                        const ops = [];
                         for (let i = 1; i < lines.length; i++) {
                             const row = parseCSVRow(lines[i].trim());
                             if (row.length < Math.min(headers.length, 2)) continue;
@@ -2281,30 +2344,40 @@
                             });
 
                             if (existingEq) {
-                                await updateDoc(doc(db, 'equipamentos', existingEq.id), {
-                                    ...eqData,
-                                    updatedAt: serverTimestamp(),
-                                    history: arrayUnion({
-                                        date: new Date().toISOString(),
-                                        user: techName,
-                                        action: `Equipamento atualizado via importação de planilha CSV.`
-                                    })
+                                ops.push({
+                                    type: 'update',
+                                    collectionName: 'equipamentos',
+                                    id: existingEq.id,
+                                    data: {
+                                        ...eqData,
+                                        updatedAt: serverTimestamp(),
+                                        history: arrayUnion({
+                                            date: new Date().toISOString(),
+                                            user: techName,
+                                            action: `Equipamento atualizado via importação de planilha CSV.`
+                                        })
+                                    }
                                 });
                                 updatedCount++;
                             } else {
-                                await addDoc(collection(db, 'equipamentos'), {
-                                    ...eqData,
-                                    history: [{
-                                        date: new Date().toISOString(),
-                                        user: techName,
-                                        action: `Equipamento importado em massa via planilha CSV.`
-                                    }],
-                                    createdAt: serverTimestamp(),
-                                    updatedAt: serverTimestamp()
+                                ops.push({
+                                    type: 'create',
+                                    collectionName: 'equipamentos',
+                                    data: {
+                                        ...eqData,
+                                        history: [{
+                                            date: new Date().toISOString(),
+                                            user: techName,
+                                            action: `Equipamento importado em massa via planilha CSV.`
+                                        }],
+                                        createdAt: serverTimestamp(),
+                                        updatedAt: serverTimestamp()
+                                    }
                                 });
                                 createdCount++;
                             }
                         }
+                        await commitInventoryWrites(ops);
 
                         let msg = "";
                         if (createdCount > 0 && updatedCount > 0) {
@@ -2365,10 +2438,10 @@
                         const text = event.target.result;
                         const lines = text.split('\n').filter(line => line.trim() !== '');
                         if (lines.length < 2) { showToast("CSV vazio ou inválido.", "error"); setIsSubmitting(false); return; }
-                        const parseCSVRow = (str) => { let res = []; let inQ = false; let cur = ''; for(let i=0; i<str.length; i++) { let c = str[i]; if(c === '"' && str[i+1] === '"') { cur += '"'; i++; } else if(c === '"') { inQ = !inQ; } else if(c === ';' && !inQ) { res.push(cur); cur = ''; } else { cur += c; } } res.push(cur); return res; };
                         const headers = parseCSVRow(lines[0].trim());
                         let createdCount = 0;
                         let updatedCount = 0;
+                        const ops = [];
                         for (let i = 1; i < lines.length; i++) {
                             const row = parseCSVRow(lines[i].trim());
                             if (row.length < Math.min(headers.length, 2)) continue;
@@ -2392,20 +2465,30 @@
                             });
 
                             if (existingCam) {
-                                await updateDoc(doc(db, 'cameras', existingCam.id), {
-                                    ...camData,
-                                    updatedAt: serverTimestamp()
+                                ops.push({
+                                    type: 'update',
+                                    collectionName: 'cameras',
+                                    id: existingCam.id,
+                                    data: {
+                                        ...camData,
+                                        updatedAt: serverTimestamp()
+                                    }
                                 });
                                 updatedCount++;
                             } else {
-                                await addDoc(collection(db, 'cameras'), {
-                                    ...camData,
-                                    createdAt: serverTimestamp(),
-                                    updatedAt: serverTimestamp()
+                                ops.push({
+                                    type: 'create',
+                                    collectionName: 'cameras',
+                                    data: {
+                                        ...camData,
+                                        createdAt: serverTimestamp(),
+                                        updatedAt: serverTimestamp()
+                                    }
                                 });
                                 createdCount++;
                             }
                         }
+                        await commitInventoryWrites(ops);
 
                         let msg = "";
                         if (createdCount > 0 && updatedCount > 0) {
@@ -2432,10 +2515,10 @@
                         const text = event.target.result;
                         const lines = text.split('\n').filter(line => line.trim() !== '');
                         if (lines.length < 2) { showToast("CSV vazio ou inválido.", "error"); setIsSubmitting(false); return; }
-                        const parseCSVRow = (str) => { let res = []; let inQ = false; let cur = ''; for(let i=0; i<str.length; i++) { let c = str[i]; if(c === '"' && str[i+1] === '"') { cur += '"'; i++; } else if(c === '"') { inQ = !inQ; } else if(c === ';' && !inQ) { res.push(cur); cur = ''; } else { cur += c; } } res.push(cur); return res; };
                         const headers = parseCSVRow(lines[0].trim());
                         let createdCount = 0;
                         let updatedCount = 0;
+                        const ops = [];
                         for (let i = 1; i < lines.length; i++) {
                             const row = parseCSVRow(lines[i].trim());
                             if (row.length < Math.min(headers.length, 2)) continue;
@@ -2454,37 +2537,46 @@
                             );
 
                             if (existingAcc) {
-                                await updateDoc(doc(db, 'acessorios', existingAcc.id), {
-                                    type,
-                                    name,
-                                    quantity,
-                                    unit,
-                                    updatedAt: serverTimestamp(),
-                                    history: arrayUnion({
-                                        date: new Date().toISOString(),
-                                        user: techName,
-                                        action: `Acessório atualizado via planilha CSV. Novo estoque: ${quantity}`
-                                    })
+                                ops.push({
+                                    type: 'update',
+                                    collectionName: 'acessorios',
+                                    id: existingAcc.id,
+                                    data: {
+                                        type,
+                                        name,
+                                        quantity,
+                                        unit,
+                                        updatedAt: serverTimestamp(),
+                                        history: arrayUnion({
+                                            date: new Date().toISOString(),
+                                            user: techName,
+                                            action: `Acessório atualizado via planilha CSV. Novo estoque: ${quantity}`
+                                        })
+                                    }
                                 });
                                 updatedCount++;
                             } else {
-                                const accData = {
-                                    type,
-                                    name,
-                                    quantity,
-                                    unit,
-                                    history: [{
-                                        date: new Date().toISOString(),
-                                        user: techName,
-                                        action: `Acessório importado em massa via planilha CSV. Estoque inicial: ${quantity}`
-                                    }],
-                                    createdAt: serverTimestamp(),
-                                    updatedAt: serverTimestamp()
-                                };
-                                await addDoc(collection(db, 'acessorios'), accData);
+                                ops.push({
+                                    type: 'create',
+                                    collectionName: 'acessorios',
+                                    data: {
+                                        type,
+                                        name,
+                                        quantity,
+                                        unit,
+                                        history: [{
+                                            date: new Date().toISOString(),
+                                            user: techName,
+                                            action: `Acessório importado em massa via planilha CSV. Estoque inicial: ${quantity}`
+                                        }],
+                                        createdAt: serverTimestamp(),
+                                        updatedAt: serverTimestamp()
+                                    }
+                                });
                                 createdCount++;
                             }
                         }
+                        await commitInventoryWrites(ops);
 
                         let msg = "";
                         if (createdCount > 0 && updatedCount > 0) {
