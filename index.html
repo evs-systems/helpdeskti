@@ -193,7 +193,7 @@
             CircleCheckBig as CheckCircle2, ChevronUp, LayoutDashboard, LayoutGrid, List, Paperclip as Attachment, Database as Inventory, Kanban as Board, CheckSquare as Checklist, BookOpen as KB, Camera
         } from 'lucide-react';
         import { initializeApp, getApps, getApp } from 'firebase/app';
-        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, getDoc, serverTimestamp, arrayUnion, deleteDoc, setDoc, runTransaction, writeBatch, query, where } from 'firebase/firestore';
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, getDoc, getDocs, deleteField, serverTimestamp, arrayUnion, deleteDoc, setDoc, runTransaction, writeBatch, query, where } from 'firebase/firestore';
         import { getAuth, signInAnonymously, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'firebase/auth';
         import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
         import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
@@ -443,6 +443,87 @@
                 byId.set(key, m.id ? m : { ...m, id: key });
             }
             return [...byId.values()].sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
+        };
+
+        const stableChatMessageId = (m) => {
+            if (m?.id && typeof m.id === 'string' && m.id.length > 0 && m.id.length < 80) return m.id;
+            const key = chatMessageKey(m);
+            if (!key) return '';
+            let h = 2166136261;
+            for (let i = 0; i < key.length; i++) {
+                h ^= key.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+            }
+            return ('h' + (h >>> 0).toString(16) + Number(key.length).toString(36)).slice(0, 79);
+        };
+
+        const toValidChatMessage = (m) => {
+            if (!m || typeof m !== 'object') return null;
+            const senderRole = m.senderRole === 'tech' ? 'tech' : (m.senderRole === 'user' ? 'user' : '');
+            if (!senderRole) return null;
+            const id = stableChatMessageId(m);
+            if (!id) return null;
+            const sender = String(m.sender || 'Usuário').slice(0, 79);
+            const timestamp = String(m.timestamp || '').slice(0, 47);
+            if (!sender || !timestamp) return null;
+            const out = { id, text: String(m.text ?? '').slice(0, 3999), sender, senderRole, timestamp };
+            if (typeof m.image === 'string' && /^https:\/\//.test(m.image) && m.image.length < 2048) out.image = m.image;
+            if (typeof m.editedAt === 'string' && m.editedAt.length > 0 && m.editedAt.length < 48) out.editedAt = m.editedAt;
+            if (m.replyTo && typeof m.replyTo === 'object') {
+                const rid = String(m.replyTo.id || '').slice(0, 79);
+                const rsender = String(m.replyTo.sender || '').slice(0, 79);
+                const rtext = String(m.replyTo.text || '').slice(0, 3999);
+                if (rid && rsender) out.replyTo = { id: rid, sender: rsender, text: rtext };
+            }
+            return out;
+        };
+
+        const copyLegacyChatThread = async (parentCol, parentId, legacy, threadName) => {
+            const list = Array.isArray(legacy) ? legacy : [];
+            if (!list.length) return { copied: 0, failed: 0 };
+            let existing = new Set();
+            try {
+                const snap = await getDocs(collection(db, parentCol, parentId, threadName));
+                existing = new Set(snap.docs.map(d => d.id));
+            } catch (err) {
+                console.warn('Leitura da thread:', err);
+                return { copied: 0, failed: list.length };
+            }
+            const toWrite = [];
+            for (const m of list) {
+                const payload = toValidChatMessage(m);
+                if (!payload) continue;
+                if (threadName === 'internal_messages' && payload.senderRole !== 'tech') continue;
+                if (existing.has(payload.id)) continue;
+                existing.add(payload.id);
+                toWrite.push(payload);
+            }
+            let copied = 0;
+            let failed = 0;
+            const chunkSize = 40;
+            for (let i = 0; i < toWrite.length; i += chunkSize) {
+                const chunk = toWrite.slice(i, i + chunkSize);
+                try {
+                    const batch = writeBatch(db);
+                    for (const payload of chunk) {
+                        batch.set(doc(db, parentCol, parentId, threadName, payload.id), payload);
+                    }
+                    await batch.commit();
+                    copied += chunk.length;
+                } catch (chunkErr) {
+                    for (const payload of chunk) {
+                        try {
+                            await setDoc(doc(db, parentCol, parentId, threadName, payload.id), payload);
+                            copied++;
+                        } catch (err) {
+                            failed++;
+                            console.warn('Cópia de mensagem:', err);
+                        }
+                    }
+                }
+                if (i + chunkSize < toWrite.length) await yieldToUi();
+            }
+            return { copied, failed };
         };
 
         const newChatMessageId = () => Date.now().toString() + Math.random().toString(36).substring(2, 9);
@@ -918,6 +999,7 @@
             const [ticketMessageLimit, setTicketMessageLimit] = useState(50);
             const [ticketThreadExtra, setTicketThreadExtra] = useState([]);
             const [gcThreadExtra, setGcThreadExtra] = useState([]);
+            const [chatCopyRetry, setChatCopyRetry] = useState(0);
             const [editingGcMsgId, setEditingGcMsgId] = useState(null);
             const [editingGcMsgText, setEditingGcMsgText] = useState('');
             const [replyingToGcMsg, setReplyingToGcMsg] = useState(null);
@@ -1107,6 +1189,10 @@
             const audioNewRef = useRef(typeof Audio !== "undefined" ? new Audio(SOUND_NEW_TICKET) : null);
             const audioUpdateRef = useRef(typeof Audio !== "undefined" ? new Audio(SOUND_UPDATE) : null);
             const prevTicketsRef = useRef({});
+            const ticketsStateRef = useRef([]);
+            const globalChatsStateRef = useRef([]);
+            const chatLegacyCopyLockRef = useRef(false);
+            const chatLegacyCopyTriesRef = useRef(0);
             const toastTimeoutRef = useRef(null);
             const timeMenuRef = useRef(null);
             const unitMenuRef = useRef(null);
@@ -2002,6 +2088,75 @@
                 });
                 return () => { isSubscribedLoad = false; unsubscribe(); };
             }, [user, isAdmin, techName, userSector, userUnit, profileReady]);
+
+            ticketsStateRef.current = tickets;
+            globalChatsStateRef.current = globalChats;
+
+            useEffect(() => {
+                if (!isAdmin || !user || loading) return;
+                const hasLegacyTicket = (t) => (t.messages && t.messages.length) || (t.internalMessages && t.internalMessages.length);
+                const hasLegacyRoom = (c) => c.messages && c.messages.length;
+                if (chatLegacyCopyLockRef.current) return;
+                if (!tickets.some(hasLegacyTicket) && !globalChats.some(hasLegacyRoom)) return;
+                chatLegacyCopyLockRef.current = true;
+                (async () => {
+                    let copiedTotal = 0;
+                    try {
+                        const pendingTickets = ticketsStateRef.current.filter(hasLegacyTicket);
+                        for (const ticket of pendingTickets) {
+                            const pub = await copyLegacyChatThread('chamados', ticket.id, ticket.messages, 'messages');
+                            const intern = await copyLegacyChatThread('chamados', ticket.id, ticket.internalMessages, 'internal_messages');
+                            copiedTotal += pub.copied + intern.copied;
+                            if (pub.failed || intern.failed) continue;
+                            const parentUpdate = { messages: deleteField(), internalMessages: deleteField() };
+                            if (!ticket.lastPublicMessage) {
+                                const lastPub = [...(ticket.messages || [])].reverse().map(toValidChatMessage).find(Boolean);
+                                if (lastPub) parentUpdate.lastPublicMessage = lastPub;
+                            }
+                            if (!ticket.lastInternalMessage) {
+                                const lastInt = [...(ticket.internalMessages || [])].reverse().map(m => {
+                                    const v = toValidChatMessage(m);
+                                    return v && v.senderRole === 'tech' ? v : null;
+                                }).find(Boolean);
+                                if (lastInt) parentUpdate.lastInternalMessage = lastInt;
+                            }
+                            try {
+                                await updateDoc(doc(db, 'chamados', ticket.id), parentUpdate);
+                            } catch (err) {
+                                console.warn('Remoção do array do chamado:', err);
+                            }
+                            await yieldToUi();
+                        }
+                        const pendingRooms = globalChatsStateRef.current.filter(hasLegacyRoom);
+                        for (const room of pendingRooms) {
+                            const res = await copyLegacyChatThread('global_chats', room.id, room.messages, 'messages');
+                            copiedTotal += res.copied;
+                            if (res.failed) continue;
+                            const parentUpdate = { messages: deleteField() };
+                            if (!room.lastMessage) {
+                                const last = [...(room.messages || [])].reverse().map(toValidChatMessage).find(Boolean);
+                                if (last) parentUpdate.lastMessage = last;
+                            }
+                            try {
+                                await updateDoc(doc(db, 'global_chats', room.id), parentUpdate);
+                            } catch (err) {
+                                console.warn('Remoção do array da sala:', err);
+                            }
+                            await yieldToUi();
+                        }
+                    } catch (err) {
+                        console.warn('Cópia do histórico de chat:', err);
+                    } finally {
+                        chatLegacyCopyLockRef.current = false;
+                        const leftover = ticketsStateRef.current.some(hasLegacyTicket) || globalChatsStateRef.current.some(hasLegacyRoom);
+                        if (leftover && chatLegacyCopyTriesRef.current < 3) {
+                            chatLegacyCopyTriesRef.current += 1;
+                            setTimeout(() => setChatCopyRetry((n) => n + 1), 8000);
+                        }
+                    }
+                    if (copiedTotal > 0) showToast("Histórico antigo das conversas foi consolidado.", "success");
+                })();
+            }, [isAdmin, user, loading, tickets, globalChats, chatCopyRetry]);
 
             useEffect(() => {
                 if (!user || !expandedChatId) {
@@ -3100,7 +3255,7 @@
                 setIsSubmitting(true);
                 try {
                     const profile = await persistColaboradorProfile(userUnit || formData.unit, userSector || formData.department);
-                    const finalData = { ...formData, unit: profile.unit, type: ticketType, status: 'aguardando', priority: 'baixa', technician: 'Pendente', notes: '', messages: [], internalMessages: [], history: [{ type: 'creation', label: 'Chamado aberto', timestamp: new Date().toISOString(), user: formatName(formData.requester) }], createdAt: serverTimestamp(), updatedAt: serverTimestamp(), userId: user ? user.uid : 'anon' };
+                    const finalData = { ...formData, unit: profile.unit, type: ticketType, status: 'aguardando', priority: 'baixa', technician: 'Pendente', notes: '', history: [{ type: 'creation', label: 'Chamado aberto', timestamp: new Date().toISOString(), user: formatName(formData.requester) }], createdAt: serverTimestamp(), updatedAt: serverTimestamp(), userId: user ? user.uid : 'anon' };
                     if (ticketType === 'request') { finalData.machineName = ''; finalData.anydeskId = ''; finalData.accessTime = ''; }
                     await addDoc(collection(db, 'chamados'), finalData);
                     setFormData({ requester: '', department: '', description: '', machineName: '', anydeskId: '', unit: '', accessTime: 'A Qualquer Momento' }); setTicketType('problem'); setView('dashboard');
