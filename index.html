@@ -1686,29 +1686,13 @@
                 }
             };
 
-            const persistThreadMessage = async (parentRef, threadPath, newMessage, arrayField, legacyExtras, bumpExtras) => {
-                let threadOk = false;
-                let parentOk = false;
+            const persistThreadMessage = async (parentRef, threadPath, newMessage, bumpExtras) => {
+                await setDoc(doc(db, ...threadPath, newMessage.id), newMessage);
+                if (!bumpExtras) return;
                 try {
-                    await setDoc(doc(db, ...threadPath, newMessage.id), newMessage);
-                    threadOk = true;
+                    await updateDoc(parentRef, bumpExtras);
                 } catch (err) {
-                    console.warn('Subcoleção de chat:', err);
-                }
-                try {
-                    await updateDoc(parentRef, { [arrayField]: arrayUnion(newMessage), ...legacyExtras });
-                    parentOk = true;
-                } catch (err) {
-                    try {
-                        await updateDoc(parentRef, bumpExtras);
-                        parentOk = true;
-                    } catch (err2) {
-                        if (!threadOk) throw err;
-                        console.warn('Array do chat (documento cheio ou permissão):', err);
-                    }
-                }
-                if (parentOk && bumpExtras) {
-                    try { await updateDoc(parentRef, bumpExtras); } catch (err) { console.warn('Campo lastMessage:', err); }
+                    console.warn('Campo lastMessage:', err);
                 }
             };
 
@@ -1746,14 +1730,12 @@
                 
                 try {
                     if (!roomExists) {
-                        await setDoc(docRef, { unit: isAdmin ? 'TI' : gcUser.unit, sector: isAdmin ? 'Interno' : gcUser.sector, name: roomName, messages: [newMessage], lastMessage: newMessage, createdAt: serverTimestamp(), lastUpdated: serverTimestamp() });
+                        await setDoc(docRef, { unit: isAdmin ? 'TI' : gcUser.unit, sector: isAdmin ? 'Interno' : gcUser.sector, name: roomName, lastMessage: newMessage, createdAt: serverTimestamp(), lastUpdated: serverTimestamp() });
                     }
                     await persistThreadMessage(
                         docRef,
                         ['global_chats', roomId, 'messages'],
                         newMessage,
-                        'messages',
-                        { lastUpdated: serverTimestamp() },
                         { lastUpdated: serverTimestamp(), lastMessage: newMessage }
                     );
                     markGcAsRead(roomId);
@@ -1766,31 +1748,42 @@
                 if (!editingGcMsgText.trim()) return;
                 const editedText = editingGcMsgText.trim();
                 const editedAt = new Date().toISOString();
-                let threadOk = false;
+                const room = globalChats.find(c => c.id === roomId);
+                const original = mergeChatMessages(room?.messages, gcThreadExtra).find(m => m.id === msgId);
+                if (!original) { showToast("Erro ao editar mensagem", "error"); return; }
+                const updated = {
+                    id: original.id || msgId,
+                    text: editedText,
+                    sender: original.sender,
+                    senderRole: original.senderRole,
+                    timestamp: original.timestamp,
+                    editedAt
+                };
+                if (original.image) updated.image = original.image;
+                if (original.replyTo) updated.replyTo = original.replyTo;
                 try {
-                    await updateDoc(doc(db, 'global_chats', roomId, 'messages', msgId), { text: editedText, editedAt });
-                    threadOk = true;
-                } catch (err) {
-                    console.warn('Edição na subcoleção:', err);
-                }
-                try {
-                    await runTransaction(db, async (transaction) => {
-                        const docRef = doc(db, 'global_chats', roomId);
-                        const snap = await transaction.get(docRef);
-                        if (!snap.exists()) return;
-                        const currentMessages = snap.data().messages || [];
-                        const updatedMessages = currentMessages.map(m => 
-                            m.id === msgId ? { ...m, text: editedText, editedAt } : m
-                        );
-                        transaction.update(docRef, { messages: updatedMessages });
-                    });
+                    await setDoc(doc(db, 'global_chats', roomId, 'messages', msgId), updated);
+                    if (pickLastGcMessage(room)?.id === msgId) {
+                        try { await updateDoc(doc(db, 'global_chats', roomId), { lastMessage: updated, lastUpdated: serverTimestamp() }); } catch (err) { console.warn('lastMessage:', err); }
+                    }
                     setEditingGcMsgId(null);
                     setEditingGcMsgText('');
                 } catch (error) {
-                    if (threadOk) {
+                    try {
+                        await runTransaction(db, async (transaction) => {
+                            const docRef = doc(db, 'global_chats', roomId);
+                            const snap = await transaction.get(docRef);
+                            if (!snap.exists()) return;
+                            const currentMessages = snap.data().messages || [];
+                            transaction.update(docRef, {
+                                messages: currentMessages.map(m =>
+                                    (m.id === msgId || chatMessageKey(m) === msgId) ? { ...m, text: editedText, editedAt } : m
+                                )
+                            });
+                        });
                         setEditingGcMsgId(null);
                         setEditingGcMsgText('');
-                    } else {
+                    } catch (err2) {
                         showToast("Erro ao editar mensagem", "error");
                     }
                 }
@@ -3131,14 +3124,11 @@
                     }
                     const newMessage = { id: newChatMessageId(), text: text, sender: isAdmin ? techName : ticket?.requester || "Usuário", senderRole: isAdmin ? 'tech' : 'user', timestamp: new Date().toISOString() };
                     if (imageUrl) newMessage.image = imageUrl;
-                    const arrayField = isInternal ? 'internalMessages' : 'messages';
                     const bumpField = isInternal ? 'lastInternalMessage' : 'lastPublicMessage';
                     await persistThreadMessage(
                         doc(db, 'chamados', ticketId),
                         ['chamados', ticketId, isInternal ? 'internal_messages' : 'messages'],
                         newMessage,
-                        arrayField,
-                        { updatedAt: serverTimestamp() },
                         { updatedAt: serverTimestamp(), [bumpField]: newMessage }
                     );
                     markAsRead(ticketId, isInternal ? 'internal' : 'public'); setChatImageFile(null); setChatImagePreview(null);
