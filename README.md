@@ -70,6 +70,8 @@ O HelpDesk TI é uma plataforma projetada para centralizar e otimizar a operaç�
 - **Arrastar e soltar** (drag-and-drop) entre colunas.
 - Detalhes com descrição, responsável, anexos e comentários.
 - Upload de documentos e arquivos de apoio por tarefa.
+- Após a conclusão, o técnico pode **arquivar** a tarefa para consulta futura, sem misturá-la no quadro.
+- Área de **Tarefas Arquivadas** para consultar o histórico e, se desejar, excluir a tarefa em definitivo.
 
 ### 📚 Base de Conhecimento
 - Registro de **informações padrão** da equipe (procedimentos, referências e links úteis).
