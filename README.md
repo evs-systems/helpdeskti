@@ -24,7 +24,7 @@ O HelpDesk TI é uma plataforma projetada para centralizar e otimizar a operaç�
 - Histórico completo de alterações por chamado.
 
 ### 💬 Chat em Tempo Real
-- **Chat público** em cada chamado para comunicação direta entre colaborador e técnico.
+- **Chat público** em cada chamado para comunicação direta entre colaborador e técnico. A equipe de TI distingue a própria mensagem (azul sólido à direita), a de outro técnico (mesmo azul, sem preenchimento sólido) e a do colaborador.
 - **Chat interno** (visível apenas para técnicos) para alinhamento da equipe sobre um chamado.
 - Envio de **imagens** via upload ou `Ctrl+V` (colar da área de transferência).
 - Visualizador de imagens integrado com zoom e navegação em galeria.
@@ -35,7 +35,7 @@ O HelpDesk TI é uma plataforma projetada para centralizar e otimizar a operaç�
 - A sala do colaborador segue a **mesma unidade e setor** informados no painel (Trocar Dados troca a fila e a sala).
 - **Chat interno exclusivo** entre técnicos para discussões privadas.
 - Sistema de salas automáticas organizadas por Unidade + Setor.
-- Respostas com citação (reply), edição de mensagens e separador de datas.
+- Respostas com citação (reply), edição de mensagens e separador de datas. A equipe de TI distingue a própria mensagem (azul sólido) da de outro técnico (mesmo azul, sem preenchimento sólido).
 - Notificações no navegador (push) e toasts interativos com ação "Ver Chat".
 
 ### 📊 Relatórios e Dashboards

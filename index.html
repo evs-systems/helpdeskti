@@ -4871,13 +4871,17 @@
                                                         )}
                                                         {threadMessages.slice(Math.max(0, threadMessages.length - ticketMessageLimit)).map((m, idx) => {
                                                         const isInternal = activeChatTab === 'internal';
-                                                        const isMe = isOwnChatMessage(m, isAdmin ? techName : (gcUser?.name || ticket.requester));
+                                                        const isTechMsg = m.senderRole === 'tech';
+                                                        const isOwnMsg = isOwnChatMessage(m, isAdmin ? techName : (gcUser?.name || ticket.requester));
+                                                        const isMe = isAdmin ? (isInternal ? m.sender === techName : isTechMsg) : m.senderRole === 'user';
                                                         
                                                         const alignmentClass = isMe ? 'items-end' : 'items-start';
                                                         
                                                         let bubbleClass = isMe ? 'bg-blue-600 text-white rounded-tr-sm shadow-md' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-100 dark:border-slate-700 rounded-tl-sm shadow-sm';
                                                         if (isInternal) {
                                                             bubbleClass = isMe ? 'bg-orange-500 text-white rounded-tr-sm shadow-md' : 'bg-orange-100 dark:bg-orange-900/60 text-orange-900 dark:text-orange-100 border border-orange-200 dark:border-orange-800/50 rounded-tl-sm shadow-sm';
+                                                        } else if (isAdmin && isTechMsg && !isOwnMsg) {
+                                                            bubbleClass = 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-tr-sm shadow-md';
                                                         }
 
                                                         return (
@@ -5025,10 +5029,12 @@
                                                         )}
                                                         {messagesToShow.map((m, idx) => {
                                                         const isInternalRoom = activeRoomId === 'internal_tech_room';
-                                                        const isMe = isOwnChatMessage(m, isAdmin ? techName : gcUser?.name);
+                                                        const isTechMsg = m.senderRole === 'tech';
+                                                        const isOwnMsg = isOwnChatMessage(m, isAdmin ? techName : gcUser?.name);
+                                                        const isMe = isAdmin ? (isInternalRoom ? m.sender === techName : isTechMsg) : m.senderRole === 'user';
                                                         
                                                         // Nova lógica: Apenas o autor exato da mensagem pode editá-la
-                                                        const canEdit = isOwnChatMessage(m, isAdmin ? techName : gcUser?.name);
+                                                        const canEdit = isOwnMsg;
                                                         
                                                         const msgDateStr = new Date(m.timestamp).toDateString();
                                                         const prevMsg = idx > 0 ? messagesToShow[idx - 1] : null;
@@ -5038,6 +5044,8 @@
                                                         let bubbleClass = isMe ? 'bg-blue-600 text-white rounded-tr-sm shadow-md' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-100 dark:border-slate-700 rounded-tl-sm shadow-sm';
                                                         if (isInternalRoom) {
                                                             bubbleClass = isMe ? 'bg-orange-500 text-white rounded-tr-sm shadow-md' : 'bg-white dark:bg-slate-800 text-orange-900 dark:text-orange-100 border border-orange-100 dark:border-orange-800 rounded-tl-sm shadow-sm';
+                                                        } else if (isAdmin && isTechMsg && !isOwnMsg) {
+                                                            bubbleClass = 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800 rounded-tr-sm shadow-md';
                                                         }
 
                                                         return (
