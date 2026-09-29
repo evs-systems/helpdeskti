@@ -2651,7 +2651,11 @@
             }, [user, expandedChatId, activeChatTab, isAdmin]);
 
             useEffect(() => {
-                if (!isAdmin || !user) { setEquipments([]); setAccessories([]); setCameras([]); setKanbanCards([]); setKbCards([]); setChecklists([]); return; }
+                if (!isAdmin || !user) { setEquipments([]); setAccessories([]); setCameras([]); setKanbanCards([]); setKbCards([]); setChecklists([]); }
+            }, [isAdmin, user]);
+
+            useEffect(() => {
+                if (!isAdmin || !user || view !== 'inventory') return;
                 let isMounted = true;
                 const safeSetState = (setter, value) => { if (isMounted) setter(value); };
 
@@ -2667,6 +2671,14 @@
                     safeSetState(setCameras, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
                 }, (error) => { if (error.code === 'permission-denied') safeSetState(setCameras, []); });
 
+                return () => { isMounted = false; unsubEq(); unsubAcc(); unsubCameras(); };
+            }, [isAdmin, user, view]);
+
+            useEffect(() => {
+                if (!isAdmin || !user || view !== 'kanban') return;
+                let isMounted = true;
+                const safeSetState = (setter, value) => { if (isMounted) setter(value); };
+
                 const unsubKanban = onSnapshot(collection(db, 'kanban_cards'), (snapshot) => {
                     safeSetState(setKanbanCards, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
                 }, (error) => {
@@ -2680,12 +2692,20 @@
                     safeSetState(setKbCards, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
                 }, (error) => { if (error.code === 'permission-denied') safeSetState(setKbCards, []); });
 
+                return () => { isMounted = false; unsubKanban(); unsubKb(); };
+            }, [isAdmin, user, view]);
+
+            useEffect(() => {
+                if (!isAdmin || !user || view !== 'checklists') return;
+                let isMounted = true;
+                const safeSetState = (setter, value) => { if (isMounted) setter(value); };
+
                 const unsubChecklists = onSnapshot(collection(db, 'checklists'), (snapshot) => {
                     safeSetState(setChecklists, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
                 }, (error) => { if (error.code === 'permission-denied') safeSetState(setChecklists, []); });
 
-                return () => { isMounted = false; unsubEq(); unsubAcc(); unsubCameras(); unsubKanban(); unsubKb(); unsubChecklists(); };
-            }, [isAdmin, user]);
+                return () => { isMounted = false; unsubChecklists(); };
+            }, [isAdmin, user, view]);
 
             const playSound = (type) => {
                 if (!isAudioEnabled) return;
