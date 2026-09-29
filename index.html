@@ -1244,6 +1244,34 @@
             };
         };
 
+        const useClickOutside = (ref, handler, active = true) => {
+            useEffect(() => {
+                if (!active) return;
+                const listener = (event) => {
+                    if (!ref.current || ref.current.contains(event.target)) return;
+                    handler(event);
+                };
+                document.addEventListener("mousedown", listener);
+                document.addEventListener("touchstart", listener);
+                return () => {
+                    document.removeEventListener("mousedown", listener);
+                    document.removeEventListener("touchstart", listener);
+                };
+            }, [ref, handler, active]);
+        };
+
+        const DropdownContainer = React.memo(({ isOpen, onClose, trigger, children, className = "relative inline-block" }) => {
+            const containerRef = useRef(null);
+            useClickOutside(containerRef, onClose, isOpen);
+
+            return (
+                <div ref={containerRef} className={className}>
+                    {trigger}
+                    {isOpen && children}
+                </div>
+            );
+        });
+
         const EquipmentCard = React.memo(({
             eq,
             eqViewMode,
@@ -2351,12 +2379,13 @@
             const [isAudioEnabled, setIsAudioEnabled] = useState(true);
             const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-            // Scroll Tracking para o Chat vs Rodapé
+            // Scroll Tracking para o Chat vs Rodapé (PERF-07: RAF + ResizeObserver)
             const scrollAreaRef = useRef(null);
             const footerRef = useRef(null);
             const [chatBottomPos, setChatBottomPos] = useState(24);
+            const scrollRafRef = useRef(null);
 
-            const handleScroll = () => {
+            const handleScroll = useCallback(() => {
                 if (!footerRef.current) return;
                 
                 // Captura a posição exata do rodapé em relação à janela visível do navegador
@@ -2365,15 +2394,17 @@
                 
                 // Calcula quantos pixels do rodapé já estão aparecendo na tela
                 const footerVisibleHeight = viewportHeight - footerRect.top;
-                
-                if (footerVisibleHeight > 0) {
-                    // Se o topo do rodapé entrou na tela, sobe o chat para não sobrepor
-                    setChatBottomPos(24 + footerVisibleHeight);
-                } else {
-                    // Se o rodapé está totalmente fora da visão, mantém na posição original
-                    setChatBottomPos(24);
-                }
-            };
+                const targetPos = footerVisibleHeight > 0 ? 24 + footerVisibleHeight : 24;
+                setChatBottomPos(prev => (prev === targetPos ? prev : targetPos));
+            }, []);
+
+            const requestHandleScroll = useCallback(() => {
+                if (scrollRafRef.current) return;
+                scrollRafRef.current = requestAnimationFrame(() => {
+                    handleScroll();
+                    scrollRafRef.current = null;
+                });
+            }, [handleScroll]);
 
             // Global Chat States
             const [isGcOpen, setIsGcOpen] = useState(false);
@@ -2411,35 +2442,31 @@
             useEffect(() => { gcStateRef.current = { isOpen: isGcOpen, room: gcActiveRoom }; }, [isGcOpen, gcActiveRoom]);
 
             useEffect(() => {
-                // Executa imediatamente e garante re-cálculos ao longo de 1 segundo (tempo de renderização de imagens/dados)
-                handleScroll();
-                const t1 = setTimeout(handleScroll, 50);
-                const t2 = setTimeout(handleScroll, 300);
-                const t3 = setTimeout(handleScroll, 800);
-                
-                window.addEventListener('resize', handleScroll);
+                requestHandleScroll();
+                window.addEventListener('resize', requestHandleScroll, { passive: true });
+                window.addEventListener('scroll', requestHandleScroll, { passive: true });
                 
                 const scrollEl = scrollAreaRef.current;
-                if (scrollEl) scrollEl.addEventListener('scroll', handleScroll, { passive: true });
-                window.addEventListener('scroll', handleScroll, { passive: true }); // Para capturar scroll do mobile/window se houver
+                if (scrollEl) scrollEl.addEventListener('scroll', requestHandleScroll, { passive: true });
                 
-                // Observador inteligente do DOM
-                let observer;
-                if (scrollEl) {
-                    observer = new MutationObserver(() => handleScroll());
-                    observer.observe(scrollEl, { childList: true, subtree: true });
+                let resizeObserver;
+                if (typeof ResizeObserver !== 'undefined' && scrollEl) {
+                    resizeObserver = new ResizeObserver(() => requestHandleScroll());
+                    resizeObserver.observe(scrollEl);
+                    if (footerRef.current) resizeObserver.observe(footerRef.current);
                 }
 
                 return () => {
-                    window.removeEventListener('resize', handleScroll);
-                    window.removeEventListener('scroll', handleScroll);
-                    if (scrollEl) scrollEl.removeEventListener('scroll', handleScroll);
-                    if (observer) observer.disconnect();
-                    clearTimeout(t1);
-                    clearTimeout(t2);
-                    clearTimeout(t3);
+                    window.removeEventListener('resize', requestHandleScroll);
+                    window.removeEventListener('scroll', requestHandleScroll);
+                    if (scrollEl) scrollEl.removeEventListener('scroll', requestHandleScroll);
+                    if (resizeObserver) resizeObserver.disconnect();
+                    if (scrollRafRef.current) {
+                        cancelAnimationFrame(scrollRafRef.current);
+                        scrollRafRef.current = null;
+                    }
                 };
-            }, [view, isGcOpen, tickets.length]); // Agora ele recalcula se a lista de chamados mudar/carregar
+            }, [view, isGcOpen, tickets.length, requestHandleScroll]); // Agora ele recalcula se a lista de chamados mudar/carregar
 
             useEffect(() => { setGcMessageLimit(50); setReplyingToGcMsg(null); }, [gcActiveRoom, isGcOpen]);
             useEffect(() => { setTicketMessageLimit(50); }, [expandedChatId, activeChatTab]);
@@ -2566,12 +2593,13 @@
                 return { start: toLocalISO(start), end: toLocalISO(end) };
             }, [reportFilterMode, selectedMonth, selectedYear]);
 
+            const prevFilteredTicketsRef = useRef([]);
             const filteredTickets = useMemo(() => {
                 const searchLower = searchTerm.toLowerCase();
                 const userSectorNorm = normalizeSearch(userSector);
                 const userUnitNorm = normalizeSearch(userUnit);
                 
-                return tickets.filter(t => {
+                const nextFiltered = tickets.filter(t => {
                     const matchesAccess = isAdmin || (userSector && userUnit && (normalizeSearch(t.department) === userSectorNorm || normalizeSearch(standardizeSectorName(t.department)) === userSectorNorm) && normalizeSearch(t.unit) === userUnitNorm);
                     if (!matchesAccess) return false;
                     const matchesSearch = (t.requester || '').toLowerCase().includes(searchLower) || (t.description || '').toLowerCase().includes(searchLower);
@@ -2604,6 +2632,27 @@
                     }
                     return view === 'archive' ? isFinalized && matchesSearch : !isFinalized && matchesSearch;
                 });
+
+                // PERF-08: Reutiliza a referência anterior se os chamados filtrados não sofreram alterações em campos de exibição/filtro
+                const prev = prevFilteredTicketsRef.current;
+                if (prev.length === nextFiltered.length) {
+                    let unchanged = true;
+                    for (let i = 0; i < nextFiltered.length; i++) {
+                        const n = nextFiltered[i];
+                        const p = prev[i];
+                        if (n !== p) {
+                            if (n.id !== p.id || n.status !== p.status || n.priority !== p.priority || n.type !== p.type || n.technician !== p.technician || n.requester !== p.requester || n.description !== p.description || n.unit !== p.unit || n.department !== p.department) {
+                                unchanged = false;
+                                break;
+                            }
+                        }
+                    }
+                    if (unchanged) {
+                        return prev;
+                    }
+                }
+                prevFilteredTicketsRef.current = nextFiltered;
+                return nextFiltered;
             }, [tickets, searchTerm, unitFilter, priorityFilter, typeFilter, isAdmin, userSector, userUnit, view, techViewMode, techName, dateFilter]);
 
             useEffect(() => {
@@ -3050,23 +3099,23 @@
             };
 
             useEffect(() => {
-                let timer1, timer2;
+                let rafId;
                 if (isGcOpen) {
                     if (!isAdmin && gcUser?.unit && gcUser?.sector) markGcAsRead(buildColaboradorProfile(gcUser.unit, gcUser.sector).roomId);
                     else if (isAdmin && gcActiveRoom) markGcAsRead(gcActiveRoom);
                     
-                    if (gcActiveRoom || (!isAdmin && gcUser)) {
-                        // Rolagem padrão para o fim ao entrar em um chat
-                        timer1 = setTimeout(() => gcEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 150);
-                    } else if (isAdmin && !gcActiveRoom) {
-                        // Rolagem para o topo ao voltar para a lista de salas
-                        timer2 = setTimeout(() => {
+                    rafId = requestAnimationFrame(() => {
+                        if (gcActiveRoom || (!isAdmin && gcUser)) {
+                            // Rolagem padrão para o fim ao entrar em um chat
+                            gcEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                        } else if (isAdmin && !gcActiveRoom) {
+                            // Rolagem para o topo ao voltar para a lista de salas
                             const list = document.getElementById('gc-room-list');
                             if (list) list.scrollTo({ top: 0, behavior: 'smooth' });
-                        }, 50);
-                    }
+                        }
+                    });
                 }
-                return () => { clearTimeout(timer1); clearTimeout(timer2); };
+                return () => { if (rafId) cancelAnimationFrame(rafId); };
             }, [isGcOpen, gcActiveRoom, globalChats, isAdmin, gcUser, gcThreadExtra.length]);
 
             const persistColaboradorProfile = async (unit, sector) => {
@@ -3649,14 +3698,14 @@
             // NOVO EFEITO: Rolagem automática restrita ao chat interno e público do chamado 
             useEffect(() => {
                 if (!expandedChatId) return;
-                const timer = setTimeout(() => {
+                const rafId = requestAnimationFrame(() => {
                     const container = document.getElementById('ticket-chat-container');
                     if (container) {
                         // Rola APENAS o container do chat, mantendo a página intacta no mesmo lugar
                         container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
                     }
-                }, 150);
-                return () => clearTimeout(timer);
+                });
+                return () => cancelAnimationFrame(rafId);
             }, [expandedChatId, activeChatTab, expandedTicketLegacyCount, ticketThreadExtra.length]);
             const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
                 return new Promise((resolve) => {
@@ -3817,9 +3866,34 @@
                 setArchiveDisplayLimit(20);
             }, [view, searchTerm, unitFilter, priorityFilter, typeFilter]);
 
-            const activeCount = useMemo(() => tickets.filter(t => t.status !== 'finalizado' && t.status !== 'contestado' && (t.technician === 'Pendente' || t.technician === techName)).length, [tickets, techName]);
-            const contestedCount = useMemo(() => tickets.filter(t => t.status === 'contestado').length, [tickets]);
-            const othersCount = useMemo(() => tickets.filter(t => t.status !== 'finalizado' && t.status !== 'contestado' && t.technician !== 'Pendente' && t.technician !== techName).length, [tickets, techName]);
+            // PERF-08: Granularização de contadores de chamados por assinatura de status e técnico
+            const ticketCountKey = useMemo(() => {
+                let key = '';
+                for (let i = 0; i < tickets.length; i++) {
+                    const t = tickets[i];
+                    key += t.id + ':' + t.status + ':' + t.technician + '|';
+                }
+                return key;
+            }, [tickets]);
+
+            const ticketCounts = useMemo(() => {
+                let active = 0, contested = 0, others = 0;
+                for (let i = 0; i < tickets.length; i++) {
+                    const t = tickets[i];
+                    if (t.status === 'contestado') {
+                        contested++;
+                    } else if (t.status !== 'finalizado') {
+                        if (t.technician === 'Pendente' || t.technician === techName) {
+                            active++;
+                        } else {
+                            others++;
+                        }
+                    }
+                }
+                return { active, contested, others };
+            }, [ticketCountKey, techName]);
+
+            const { active: activeCount, contested: contestedCount, others: othersCount } = ticketCounts;
 
             const calculateStats = (data) => {
                 const total = data.length;
