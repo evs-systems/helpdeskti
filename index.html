@@ -417,8 +417,43 @@
         const formatDisplay = (text) => {
             if (!text) return "Pendente";
             let clean = String(text).trim().toLowerCase();
-            const dictionary = { "gerencia": "Gerência", "gerência": "Gerência", "ti": "TI", "rh": "RH", "manutencao": "Manutenção", "manutenção": "Manutenção", "producao": "Produção", "produção": "Produção", "eversky": "Eversky" };
+            const dictionary = {
+                "gerencia": "Gerência",
+                "gerência": "Gerência",
+                "ti": "TI",
+                "rh": "RH",
+                "manutencao": "Manutenção",
+                "manutenção": "Manutenção",
+                "producao": "Produção",
+                "produção": "Produção",
+                "eversky": "Eversky",
+                "anuncio": "Anúncios",
+                "anúncio": "Anúncios",
+                "anuncios": "Anúncios",
+                "anúncios": "Anúncios",
+                "pos": "Pós Vendas",
+                "pos venda": "Pós Vendas",
+                "pos vendas": "Pós Vendas",
+                "posvenda": "Pós Vendas",
+                "posvendas": "Pós Vendas",
+                "pós": "Pós Vendas",
+                "pós venda": "Pós Vendas",
+                "pós vendas": "Pós Vendas",
+                "pos-venda": "Pós Vendas",
+                "pos-vendas": "Pós Vendas",
+                "pós-venda": "Pós Vendas",
+                "pós-vendas": "Pós Vendas",
+                "pos shopee": "Pós Shopee",
+                "pos-shopee": "Pós Shopee",
+                "pós shopee": "Pós Shopee",
+                "pós-shopee": "Pós Shopee",
+                "pos - shopee": "Pós Shopee",
+                "pós - shopee": "Pós Shopee",
+                "posshopee": "Pós Shopee"
+            };
             if (dictionary[clean]) return dictionary[clean];
+            const cleanNorm = clean.replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
+            if (dictionary[cleanNorm]) return dictionary[cleanNorm];
             
             const prepositions = ["de", "do", "da", "dos", "das", "e", "em", "na", "no", "nas", "nos", "por", "para", "com"];
             return clean.split(/\s+/).map((word, i) => {
@@ -435,35 +470,170 @@
             return String(text).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().replace(/\s+/g, " ");
         };
 
-        const standardizeSectorName = (text) => {
+        const stemWordPT = (word) => {
+            if (!word || typeof word !== 'string' || word.length <= 3) return word || "";
+            const w = word.toLowerCase();
+            if (w.endsWith('oes') || w.endsWith('aes') || w.endsWith('aos')) return w.slice(0, -3) + 'ao';
+            if (w.endsWith('ais')) return w.slice(0, -3) + 'al';
+            if (w.endsWith('eis')) return w.slice(0, -3) + 'el';
+            if (w.endsWith('ois')) return w.slice(0, -3) + 'ol';
+            if (w.endsWith('uis')) return w.slice(0, -3) + 'ul';
+            if (w.endsWith('ns')) return w.slice(0, -2) + 'm';
+            if (w.endsWith('res') || w.endsWith('zes')) return w.slice(0, -2);
+            if (w.endsWith('s') && /[aeiou]s$/.test(w)) return w.slice(0, -1);
+            return w;
+        };
+
+        const stemPhrasePT = (phrase) => {
+            if (!phrase) return "";
+            return normalizeSearch(String(phrase).replace(/-/g, ' '))
+                .split(/\s+/)
+                .filter(Boolean)
+                .map(stemWordPT)
+                .join(' ');
+        };
+
+        const CANONICAL_SECTORS = [
+            "Anúncios",
+            "Pós Vendas",
+            "Pós Shopee",
+            "RH",
+            "TI",
+            "Gerência",
+            "Manutenção",
+            "Produção",
+            "Administrativo",
+            "Financeiro",
+            "Comercial",
+            "Estoque",
+            "Fiscal",
+            "Marketing",
+            "Perguntas",
+            "Operações",
+            "Cobrança",
+            "Logística",
+            "Suporte",
+            "Compras",
+            "Expedição",
+            "Impressão",
+            "Importação",
+            "Flex",
+            "Shopee"
+        ];
+
+        const standardizeSectorName = (text, existingRooms = null, unit = null) => {
             if (!text) return "";
-            // Remove traços e usa a normalização base (sem acentos e minúsculo) para facilitar a comparação
-            let normalized = normalizeSearch(text.replace(/-/g, ' '));
+            let normalized = normalizeSearch(String(text).replace(/-/g, ' '));
             
             const sectorMap = {
                 "pos": "Pós Vendas",
                 "pos vendas": "Pós Vendas",
                 "pos venda": "Pós Vendas",
+                "posvenda": "Pós Vendas",
+                "posvendas": "Pós Vendas",
+                "pós": "Pós Vendas",
+                "pós vendas": "Pós Vendas",
+                "pós venda": "Pós Vendas",
+                "pos shopee": "Pós Shopee",
+                "pos-shopee": "Pós Shopee",
+                "pós shopee": "Pós Shopee",
+                "pós-shopee": "Pós Shopee",
+                "posshopee": "Pós Shopee",
+                "pos shope": "Pós Shopee",
+                "anuncio": "Anúncios",
+                "anuncios": "Anúncios",
+                "anúncio": "Anúncios",
+                "anúncios": "Anúncios",
                 "rh": "RH",
                 "recursos humanos": "RH",
+                "recurso humano": "RH",
                 "ti": "TI",
                 "tecnologia": "TI",
                 "tecnologia da informacao": "TI",
+                "tecnologia da informação": "TI",
                 "informatica": "TI",
+                "informática": "TI",
                 "gerencia": "Gerência",
+                "gerência": "Gerência",
+                "gerente": "Gerência",
+                "gerentes": "Gerência",
                 "diretoria": "Gerência",
+                "diretorias": "Gerência",
                 "manutencao": "Manutenção",
+                "manutenção": "Manutenção",
+                "manutencoes": "Manutenção",
+                "manutenções": "Manutenção",
                 "producao": "Produção",
+                "produção": "Produção",
+                "producoes": "Produção",
+                "produções": "Produção",
                 "adm": "Administrativo",
                 "administracao": "Administrativo",
+                "administração": "Administrativo",
                 "administrativo": "Administrativo",
+                "administrativos": "Administrativo",
                 "fin": "Financeiro",
                 "financeiro": "Financeiro",
+                "financeiros": "Financeiro",
                 "comercial": "Comercial",
-                "vendas": "Comercial"
+                "comerciais": "Comercial",
+                "venda": "Comercial",
+                "vendas": "Comercial",
+                "estoque": "Estoque",
+                "estoques": "Estoque",
+                "fiscal": "Fiscal",
+                "fiscais": "Fiscal",
+                "marketing": "Marketing",
+                "mkt": "Marketing",
+                "pergunta": "Perguntas",
+                "perguntas": "Perguntas",
+                "operacao": "Operações",
+                "operação": "Operações",
+                "operacoes": "Operações",
+                "operações": "Operações",
+                "cobranca": "Cobrança",
+                "cobrança": "Cobrança",
+                "cobrancas": "Cobrança",
+                "cobranças": "Cobrança",
+                "logistica": "Logística",
+                "logística": "Logística",
+                "suporte": "Suporte",
+                "suportes": "Suporte",
+                "compra": "Compras",
+                "compras": "Compras",
+                "expedicao": "Expedição",
+                "expedição": "Expedição",
+                "expedicoes": "Expedição",
+                "expedições": "Expedição",
+                "impressao": "Impressão",
+                "impressão": "Impressão",
+                "impressoes": "Impressão",
+                "impressões": "Impressão",
+                "importacao": "Importação",
+                "importação": "Importação",
+                "importacoes": "Importação",
+                "importações": "Importação",
+                "flex": "Flex",
+                "shopee": "Shopee"
             };
 
             if (sectorMap[normalized]) return sectorMap[normalized];
+
+            const inputStem = stemPhrasePT(text);
+
+            // Casamento com a lista canônica por radical/plural
+            const canonicalMatch = CANONICAL_SECTORS.find(c => stemPhrasePT(c) === inputStem);
+            if (canonicalMatch) return canonicalMatch;
+
+            // Se salas existentes forem fornecidas, busca correspondência com sala já criada
+            if (Array.isArray(existingRooms) && existingRooms.length > 0) {
+                const normUnit = unit ? normalizeSearch(unit) : null;
+                const roomMatch = existingRooms.find(r => {
+                    if (normUnit && r.unit && normalizeSearch(r.unit) !== normUnit) return false;
+                    return r.sector && stemPhrasePT(r.sector) === inputStem;
+                });
+                if (roomMatch && roomMatch.sector) return roomMatch.sector;
+            }
             
             // Fallback: Capitaliza mantendo a pontuação e ignorando preposições
             const prepositions = ["de", "do", "da", "dos", "das", "e", "em", "na", "no", "nas", "nos", "por", "para", "com"];
@@ -476,9 +646,22 @@
             }).join(' ');
         };
 
-        const buildColaboradorProfile = (unit, sector) => {
+        const canonicalRoomId = (roomId) => {
+            if (!roomId || roomId === 'internal_tech_room') return roomId;
+            const parts = String(roomId).split('_');
+            if (parts.length >= 2) {
+                const unitPart = parts[0];
+                const sectorPart = parts.slice(1).join('_');
+                const canonicalSector = standardizeSectorName(sectorPart);
+                const canonicalKey = normalizeSearch(canonicalSector);
+                return `${unitPart}_${canonicalKey}`;
+            }
+            return roomId;
+        };
+
+        const buildColaboradorProfile = (unit, sector, existingRooms = null) => {
             const normalizedUnit = normalizeUnitName(unit);
-            const sectorText = standardizeSectorName(sector);
+            const sectorText = standardizeSectorName(sector, existingRooms, normalizedUnit);
             const sectorKey = normalizeSearch(sectorText);
             return {
                 unit: normalizedUnit,
@@ -967,7 +1150,10 @@
             const [isAuthInitializing, setIsAuthInitializing] = useState(true);
             const [isSubmitting, setIsSubmitting] = useState(false);
             const [searchTerm, setSearchTerm] = useState('');
-            const [userSector, setUserSector] = useState(() => safeStorage.get('helpdesk_user_sector', ''));
+            const [userSector, setUserSector] = useState(() => {
+                const s = safeStorage.get('helpdesk_user_sector', '');
+                return s ? standardizeSectorName(s) : '';
+            });
             const [userUnit, setUserUnit] = useState(() => {
                 const official = normalizeUnitName(safeStorage.get('helpdesk_user_unit', ''));
                 return UNIT_QUICK_FILTERS.includes(official) ? official : '';
@@ -1053,7 +1239,12 @@
             const [gcUser, setGcUser] = useState(() => { 
                 try { 
                     const savedUser = safeStorage.get('helpdesk_gc_user');
-                    return savedUser ? JSON.parse(savedUser) : null; 
+                    if (!savedUser) return null;
+                    const parsed = JSON.parse(savedUser);
+                    if (parsed && parsed.unit && parsed.sector) {
+                        return { ...parsed, sector: standardizeSectorName(parsed.sector) };
+                    }
+                    return parsed; 
                 } catch { 
                     return null; 
                 } 
@@ -1300,7 +1491,7 @@
                 const userUnitNorm = normalizeSearch(userUnit);
                 
                 return tickets.filter(t => {
-                    const matchesAccess = isAdmin || (userSector && userUnit && normalizeSearch(t.department) === userSectorNorm && normalizeSearch(t.unit) === userUnitNorm);
+                    const matchesAccess = isAdmin || (userSector && userUnit && (normalizeSearch(t.department) === userSectorNorm || normalizeSearch(standardizeSectorName(t.department)) === userSectorNorm) && normalizeSearch(t.unit) === userUnitNorm);
                     if (!matchesAccess) return false;
                     const matchesSearch = (t.requester || '').toLowerCase().includes(searchLower) || (t.description || '').toLowerCase().includes(searchLower);
                     const matchesUnit = !isAdmin || unitFilter === 'Todas' || t.unit === unitFilter;
@@ -1549,7 +1740,11 @@
                         if (cancelled || gen !== profileHydrateGen.current) return;
                         if (snap.exists() && snap.data().unit && snap.data().sector) {
                             const data = snap.data();
-                            applyProfile({ unit: data.unit, sector: data.sector });
+                            const profile = buildColaboradorProfile(data.unit, data.sector);
+                            applyProfile(profile);
+                            if (profile.sector !== data.sector || profile.roomId !== data.roomId || profile.sectorKey !== data.sectorKey) {
+                                await writeProfileBestEffort(profile);
+                            }
                         } else {
                             const cachedUnit = safeStorage.get('helpdesk_user_unit', '');
                             const cachedSector = safeStorage.get('helpdesk_user_sector', '');
@@ -2149,7 +2344,7 @@
                                 }
 
                                 if (!isAdmin) {
-                                    const matchesContext = normalizeSearch(currentData.department) === normalizeSearch(userSector) && normalizeSearch(currentData.unit) === normalizeSearch(userUnit);
+                                    const matchesContext = (normalizeSearch(currentData.department) === normalizeSearch(userSector) || normalizeSearch(standardizeSectorName(currentData.department)) === normalizeSearch(userSector)) && normalizeSearch(currentData.unit) === normalizeSearch(userUnit);
                                     if (matchesContext) {
                                         if (currentData.status !== prevData.status) {
                                             playSound('update');
