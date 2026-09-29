@@ -1140,6 +1140,43 @@
             return <div className={`space-y-1.5 ${className}`}>{elements}</div>;
         });
 
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null };
+            }
+            static getDerivedStateFromError(error) {
+                return { hasError: true, error };
+            }
+            componentDidCatch(error, errorInfo) {
+                console.error("ErrorBoundary capturou uma falha:", error, errorInfo);
+            }
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-6 text-center">
+                            <div className="max-w-md w-full bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700">
+                                <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                    <AlertTriangle size={32} />
+                                </div>
+                                <h1 className="text-xl font-bold mb-2">Ops! Ocorreu uma instabilidade</h1>
+                                <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">
+                                    Seus dados no servidor estão seguros. Tente recarregar o sistema para restaurar a sessão.
+                                </p>
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                    <RotateCcw size={18} /> Recarregar Sistema
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
         function App() {
             const [user, setUser] = useState(null);
             const [isAdmin, setIsAdmin] = useState(() => safeStorage.get('helpdesk_is_admin') === 'true');
@@ -2529,23 +2566,29 @@
                 return mergeChatMessages(ticket.internalMessages, extra).some(m => m.senderRole === 'tech' && m.sender !== techName && m.timestamp > lastRead);
             };
 
+            const expandedTicket = useMemo(() => {
+                if (!expandedChatId) return null;
+                return tickets.find(t => t.id === expandedChatId) || null;
+            }, [tickets, expandedChatId]);
+
+            const expandedTicketLegacyCount = (activeChatTab === 'internal'
+                ? expandedTicket?.internalMessages?.length
+                : expandedTicket?.messages?.length) || 0;
+
             useEffect(() => {
-                if (expandedChatId && activeChatTab) {
-                    const ticket = tickets.find(t => t.id === expandedChatId);
-                    if (ticket) {
-                        const legacy = activeChatTab === 'internal' ? ticket.internalMessages : ticket.messages;
-                        const messages = mergeChatMessages(legacy, ticketThreadExtra);
-                        if (messages && messages.length > 0) {
-                            const lastMsgTimestamp = messages[messages.length - 1].timestamp;
-                            setLastReadTimes(prev => {
-                                const currentLastRead = prev[`${expandedChatId}_${activeChatTab}`] || "0";
-                                if (lastMsgTimestamp > currentLastRead) { return { ...prev, [`${expandedChatId}_${activeChatTab}`]: new Date().toISOString() }; }
-                                return prev;
-                            });
-                        }
+                if (expandedTicket && activeChatTab) {
+                    const legacy = activeChatTab === 'internal' ? expandedTicket.internalMessages : expandedTicket.messages;
+                    const messages = mergeChatMessages(legacy, ticketThreadExtra);
+                    if (messages && messages.length > 0) {
+                        const lastMsgTimestamp = messages[messages.length - 1].timestamp;
+                        setLastReadTimes(prev => {
+                            const currentLastRead = prev[`${expandedChatId}_${activeChatTab}`] || "0";
+                            if (lastMsgTimestamp > currentLastRead) { return { ...prev, [`${expandedChatId}_${activeChatTab}`]: new Date().toISOString() }; }
+                            return prev;
+                        });
                     }
                 }
-            }, [tickets, expandedChatId, activeChatTab, ticketThreadExtra]);
+            }, [expandedTicket, expandedChatId, activeChatTab, ticketThreadExtra]);
 
             // NOVO EFEITO: Rolagem automática restrita ao chat interno e público do chamado 
             useEffect(() => {
@@ -2558,7 +2601,7 @@
                     }
                 }, 150);
                 return () => clearTimeout(timer);
-            }, [expandedChatId, activeChatTab, tickets.find(t => t.id === expandedChatId)?.messages?.length, tickets.find(t => t.id === expandedChatId)?.internalMessages?.length, ticketThreadExtra.length]);
+            }, [expandedChatId, activeChatTab, expandedTicketLegacyCount, ticketThreadExtra.length]);
             const compressImage = (file, maxWidth = 1600, quality = 0.8) => {
                 return new Promise((resolve) => {
                     if (file.size < 500 * 1024) { resolve(file); return; } // < 500KB, não comprimir
@@ -5431,7 +5474,11 @@
             );
         }
         const root = createRoot(document.getElementById('root'));
-        root.render(<App />);
+        root.render(
+            <ErrorBoundary>
+                <App />
+            </ErrorBoundary>
+        );
     </script>
     <script type="module">
         import { transform } from 'sucrase';
