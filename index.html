@@ -1177,6 +1177,141 @@
             }
         }
 
+        const paginateList = (items, limit) => (Array.isArray(items) ? items.slice(0, limit) : []);
+
+        const LoadMoreButton = React.memo(({ currentLimit, totalCount, onLoadMore, label }) => {
+            if (currentLimit >= totalCount) return null;
+            return (
+                <div className="pt-6 pb-2 flex justify-center animate-in fade-in">
+                    <button
+                        onClick={onLoadMore}
+                        className="px-6 py-3 rounded-2xl text-xs font-bold bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                        <PlusCircle size={16} /> Carregar Mais {label} ({totalCount - currentLimit} restantes)
+                    </button>
+                </div>
+            );
+        });
+
+        const EquipmentCard = React.memo(({
+            eq,
+            eqViewMode,
+            isExpandedLog,
+            onToggleLog,
+            onUpdateStatus,
+            onEdit,
+            onDecommission
+        }) => {
+            return (
+                <div className={`bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-shadow flex ${eqViewMode === 'list' ? 'flex-col' : 'flex-col justify-between'}`}>
+                    <div className={`flex ${eqViewMode === 'list' ? 'flex-col lg:flex-row gap-6 lg:items-center justify-between' : 'flex-col gap-4'}`}>
+                        <div className={`flex items-start gap-4 min-w-0 ${eqViewMode === 'list' ? 'lg:max-w-xs xl:max-w-sm items-center' : ''}`}>
+                            <div className={`shrink-0 p-4 rounded-2xl ${eq.type === 'Celular' ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20' : eq.type === 'Desktop' ? 'bg-orange-50 text-orange-600 dark:bg-orange-900/20' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}`}>
+                                {eq.type === 'Celular' || eq.type === 'Tablet' ? <Smartphone size={28}/> : eq.type === 'Desktop' ? <Cpu size={28}/> : <Laptop size={28}/>}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <h4 className="text-lg font-black dark:text-white leading-tight truncate md:whitespace-normal md:line-clamp-2 lg:line-clamp-none break-words" title={eq.model}>{eq.model}</h4>
+                                <div className="flex items-center flex-wrap gap-2 mt-1">
+                                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md uppercase tracking-wider">{eq.type}</span>
+                                    {eq.deviceId && <span className="text-[10px] font-mono font-bold text-slate-400 px-2 py-0.5 border dark:border-slate-700 rounded-md"><Hash size={10} className="inline mr-1 -mt-0.5"/>{eq.deviceId}</span>}
+                                    {eq.serialNumber && <span className="text-[10px] font-mono font-bold text-slate-400 px-2 py-0.5 border dark:border-slate-700 rounded-md">S/N: {eq.serialNumber}</span>}
+                                </div>
+                            </div>
+                        </div>
+                        <div className={`${eqViewMode === 'list' ? 'flex-1 grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-4 px-0 lg:px-6' : 'grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl'}`}>
+                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Localização</p><p className="text-xs font-bold dark:text-slate-300 truncate">{eq.unit ? `${eq.unit} - ${eq.department}` : 'Não definida'}</p></div>
+                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Operador</p><p className="text-xs font-bold dark:text-slate-300 truncate" title={eq.operator}>{eq.operator || 'N/A'}</p></div>
+                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">AnyDesk</p><p className="text-xs font-bold dark:text-slate-300 font-mono truncate">{eq.anydeskId || 'N/A'}</p></div>
+                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Nº de Série</p><p className="text-xs font-bold dark:text-slate-300 font-mono truncate" title={eq.serialNumber}>{eq.serialNumber || 'N/A'}</p></div>
+                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Especificações</p><p className="text-xs font-bold dark:text-slate-300 truncate" title={eq.specs}>{eq.specs || 'N/A'}</p></div>
+                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Aquisição</p><p className="text-xs font-bold dark:text-slate-300">{formatDateBr(eq.acquisitionDate)}</p></div>
+                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Garantia</p><p className="text-xs font-bold dark:text-slate-300">{eq.warrantyDate ? formatDateBr(eq.warrantyDate) : 'N/A'}</p></div>
+                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Preço</p><p className="text-xs font-bold text-green-600 dark:text-green-400">{formatCurrency(eq.price)}</p></div>
+                        </div>
+                        <div className={`flex items-center gap-3 ${eqViewMode === 'list' ? 'mt-4 lg:mt-0' : 'mt-auto pt-4 border-t dark:border-slate-800 justify-between'}`}>
+                            <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex items-center">
+                                <button onClick={() => onUpdateStatus('guardado')} className={`px-4 py-2 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${eq.status === 'guardado' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>Guardado</button>
+                                <button onClick={() => onUpdateStatus('em_uso')} className={`px-4 py-2 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${eq.status === 'em_uso' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>Em Uso</button>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={onEdit} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-xl transition-colors cursor-pointer" title="Editar Equipamento"><Edit size={18}/></button>
+                                <button onClick={onDecommission} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-xl transition-colors cursor-pointer" title="Dar Baixa"><Trash2 size={18}/></button>
+                                <button onClick={onToggleLog} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-xl transition-colors cursor-pointer" title="Ver Histórico"><History size={18}/></button>
+                            </div>
+                        </div>
+                    </div>
+                    {isExpandedLog && (
+                        <div className="mt-4 pt-4 border-t dark:border-slate-800 animate-in slide-in-from-top-2">
+                            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Histórico de Movimentações</h4>
+                            <div className="space-y-3 max-h-40 overflow-y-auto custom-scrollbar pr-2">
+                                {[...(eq.history || [])].reverse().map((log, i) => (
+                                    <div key={i} className="flex items-start gap-3">
+                                        <div className="mt-1"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div></div>
+                                        <div>
+                                            <p className="text-xs font-bold dark:text-slate-300">{log.action}</p>
+                                            <p className="text-[9px] font-bold text-slate-400 mt-0.5">{formatTimestamp(log.date)} • por {log.user}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        });
+
+        const TicketListRow = React.memo(({
+            ticket,
+            status,
+            priority,
+            isAdmin,
+            isLockedForTech,
+            isFinalized,
+            isPending,
+            hasPublicUnread,
+            hasInternalUnread,
+            onOpenDetails,
+            onTakeTicket
+        }) => {
+            const StatusIcon = status.icon;
+            const PriorityIcon = priority.icon;
+            const ticketTitle = ticket.type === 'request' ? 'Solicitação de Equipamento/Acesso' : 'Problema Técnico';
+            const TicketTypeIcon = ticket.type === 'request' ? PackagePlus : Wrench;
+
+            return (
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                        <div className={`shrink-0 p-3 rounded-2xl ${ticket.type === 'request' ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}`}>
+                            <TicketTypeIcon size={20} />
+                        </div>
+                        <div className="min-w-0 pr-4">
+                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border dark:border-slate-700">#{ticket.id.substring(0,6)}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex items-center gap-1 ${status.color}`}><StatusIcon size={10} /> {status.label}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex items-center gap-1 ${priority.color}`}><PriorityIcon size={10} /> {priority.label}</span>
+                            </div>
+                            <h4 className="text-sm font-black dark:text-white truncate" title={ticket.description}>{ticketTitle}: <span className="font-medium text-slate-500 dark:text-slate-400">{ticket.description}</span></h4>
+                        </div>
+                    </div>
+                    <div className="hidden xl:grid grid-cols-4 gap-4 px-4 flex-1">
+                        <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><User size={10}/> Solicitante</p><p className="text-xs font-bold dark:text-slate-300 truncate">{formatName(ticket.requester)}</p></div>
+                        <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><Building2 size={10}/> Localização</p><p className="text-xs font-bold dark:text-slate-300 truncate">{formatDisplay(ticket.unit)}</p></div>
+                        <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><UserPlus size={10}/> Atendimento</p><p className="text-xs font-bold text-blue-600 truncate">{ticket.technician || 'Aguardando'}</p></div>
+                        <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><Calendar size={10}/> Abertura</p><p className="text-xs font-bold dark:text-slate-300">{formatTimestamp(ticket.createdAt).split(' ')[0].replace(',', '')}</p></div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2 lg:mt-0 shrink-0">
+                        <button onClick={onOpenDetails} className="relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer">
+                            <MessageSquare size={14}/> Detalhes
+                            {hasPublicUnread && !hasInternalUnread && (<div className="absolute -top-1 -right-1 p-1 rounded-full border-2 border-white dark:border-slate-900 bg-blue-600 shadow-md animate-bounce"><Bell size={8} className="text-white fill-current" /></div>)}
+                            {!hasPublicUnread && hasInternalUnread && (<div className="absolute -top-1 -right-1 p-1 rounded-full border-2 border-white dark:border-slate-900 bg-orange-500 shadow-md animate-bounce"><Bell size={8} className="text-white fill-current" /></div>)}
+                            {hasPublicUnread && hasInternalUnread && (<div className="absolute -top-1 -right-1 flex -space-x-1 animate-bounce"><div className="p-1 rounded-full border-2 border-white dark:border-slate-900 bg-blue-600 shadow-md z-10"><Bell size={6} className="text-white fill-current" /></div><div className="p-1 rounded-full border-2 border-white dark:border-slate-900 bg-orange-500 shadow-md z-0"><Bell size={6} className="text-white fill-current" /></div></div>)}
+                        </button>
+                        {isAdmin && !isFinalized && (<>{isPending && (<button onClick={onTakeTicket} className="p-2 rounded-xl text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40 dark:text-green-400 transition-all cursor-pointer" title="Assumir Chamado"><UserPlus size={16}/></button>)}{isLockedForTech && (<button onClick={onTakeTicket} className="p-2 rounded-xl text-purple-700 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 dark:text-purple-400 transition-all cursor-pointer" title="Assumir Chamado"><UserPlus size={16}/></button>)}</>)}
+                    </div>
+                </div>
+            );
+        });
+
         function App() {
             const [user, setUser] = useState(null);
             const [isAdmin, setIsAdmin] = useState(() => safeStorage.get('helpdesk_is_admin') === 'true');
@@ -1563,6 +1698,13 @@
             }, [tickets, searchTerm, unitFilter, priorityFilter, typeFilter, isAdmin, userSector, userUnit, view, techViewMode, techName, dateFilter]);
 
             useEffect(() => {
+                return () => {
+                    if (lineChartInstanceRef.current) { lineChartInstanceRef.current.destroy(); lineChartInstanceRef.current = null; }
+                    if (pieChartInstanceRef.current) { pieChartInstanceRef.current.destroy(); pieChartInstanceRef.current = null; }
+                };
+            }, [view, isAdmin]);
+
+            useEffect(() => {
                 if (view !== 'reports' || !isAdmin || !window.Chart) {
                     if (lineChartInstanceRef.current) { lineChartInstanceRef.current.destroy(); lineChartInstanceRef.current = null; }
                     if (pieChartInstanceRef.current) { pieChartInstanceRef.current.destroy(); pieChartInstanceRef.current = null; }
@@ -1699,11 +1841,6 @@
                         });
                     }
                 }
-                
-                return () => {
-                    if (lineChartInstanceRef.current) { lineChartInstanceRef.current.destroy(); lineChartInstanceRef.current = null; }
-                    if (pieChartInstanceRef.current) { pieChartInstanceRef.current.destroy(); pieChartInstanceRef.current = null; }
-                };
             }, [view, filteredTickets, isDarkMode, reportFilterMode, selectedMonth, selectedYear, isAdmin]);
 
             useEffect(() => {
@@ -2754,7 +2891,7 @@
             };
 
             const paginatedTickets = useMemo(() => {
-                return view === 'archive' ? filteredTickets.slice(0, archiveDisplayLimit) : filteredTickets;
+                return view === 'archive' ? paginateList(filteredTickets, archiveDisplayLimit) : filteredTickets;
             }, [filteredTickets, view, archiveDisplayLimit]);
 
             useEffect(() => {
@@ -2795,7 +2932,7 @@
             }), [equipments, eqTypeFilter, eqUnitFilter, eqStatusFilter, eqSearchTerm]);
 
             const paginatedEquipments = useMemo(() => {
-                return filteredEquipments.slice(0, eqDisplayLimit);
+                return paginateList(filteredEquipments, eqDisplayLimit);
             }, [filteredEquipments, eqDisplayLimit]);
 
             useEffect(() => {
@@ -2811,7 +2948,7 @@
             ), [accessories, accTypeFilter, accUnitFilter, accSearchTerm]);
 
             const paginatedAccessories = useMemo(() => {
-                return filteredAccessories.slice(0, accDisplayLimit);
+                return paginateList(filteredAccessories, accDisplayLimit);
             }, [filteredAccessories, accDisplayLimit]);
 
             useEffect(() => {
@@ -2854,7 +2991,7 @@
             }), [cameras, camUnitFilter, camStatusFilter, camSearchTerm]);
 
             const paginatedCameras = useMemo(() => {
-                return filteredCameras.slice(0, camDisplayLimit);
+                return paginateList(filteredCameras, camDisplayLimit);
             }, [filteredCameras, camDisplayLimit]);
 
             useEffect(() => {
@@ -4279,52 +4416,25 @@
                                 <div className={eqViewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" : "flex flex-col gap-3"}>
                                 {filteredEquipments.length === 0 ? (<div className="col-span-full py-24 text-center border-2 border-dashed rounded-3xl text-slate-400 font-bold border-slate-200 dark:border-slate-800">Nenhum equipamento ativo encontrado.</div>) : (
                                     paginatedEquipments.map(eq => (
-                                    <div key={eq.id} className={`bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-shadow flex ${eqViewMode === 'list' ? 'flex-col' : 'flex-col justify-between'}`}>
-                                        <div className={`flex ${eqViewMode === 'list' ? 'flex-col lg:flex-row gap-6 lg:items-center justify-between' : 'flex-col gap-4'}`}>
-                                        <div className={`flex items-start gap-4 min-w-0 ${eqViewMode === 'list' ? 'lg:max-w-xs xl:max-w-sm items-center' : ''}`}>
-                                            <div className={`shrink-0 p-4 rounded-2xl ${eq.type === 'Celular' ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20' : eq.type === 'Desktop' ? 'bg-orange-50 text-orange-600 dark:bg-orange-900/20' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}`}>{eq.type === 'Celular' || eq.type === 'Tablet' ? <Smartphone size={28}/> : eq.type === 'Desktop' ? <Cpu size={28}/> : <Laptop size={28}/>}</div>
-                                            <div className="min-w-0 flex-1">
-                                                <h4 className="text-lg font-black dark:text-white leading-tight truncate md:whitespace-normal md:line-clamp-2 lg:line-clamp-none break-words" title={eq.model}>{eq.model}</h4>
-                                                <div className="flex items-center flex-wrap gap-2 mt-1">
-                                                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md uppercase tracking-wider">{eq.type}</span>
-                                                    {eq.deviceId && <span className="text-[10px] font-mono font-bold text-slate-400 px-2 py-0.5 border dark:border-slate-700 rounded-md"><Hash size={10} className="inline mr-1 -mt-0.5"/>{eq.deviceId}</span>}
-                                                    {eq.serialNumber && <span className="text-[10px] font-mono font-bold text-slate-400 px-2 py-0.5 border dark:border-slate-700 rounded-md">S/N: {eq.serialNumber}</span>}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className={`${eqViewMode === 'list' ? 'flex-1 grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-4 px-0 lg:px-6' : 'grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl'}`}>
-                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Localização</p><p className="text-xs font-bold dark:text-slate-300 truncate">{eq.unit ? `${eq.unit} - ${eq.department}` : 'Não definida'}</p></div>
-                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Operador</p><p className="text-xs font-bold dark:text-slate-300 truncate" title={eq.operator}>{eq.operator || 'N/A'}</p></div>
-                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">AnyDesk</p><p className="text-xs font-bold dark:text-slate-300 font-mono truncate">{eq.anydeskId || 'N/A'}</p></div>
-                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Nº de Série</p><p className="text-xs font-bold dark:text-slate-300 font-mono truncate" title={eq.serialNumber}>{eq.serialNumber || 'N/A'}</p></div>
-                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Especificações</p><p className="text-xs font-bold dark:text-slate-300 truncate" title={eq.specs}>{eq.specs || 'N/A'}</p></div>
-                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Aquisição</p><p className="text-xs font-bold dark:text-slate-300">{formatDateBr(eq.acquisitionDate)}</p></div>
-                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Garantia</p><p className="text-xs font-bold dark:text-slate-300">{eq.warrantyDate ? formatDateBr(eq.warrantyDate) : 'N/A'}</p></div>
-                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Preço</p><p className="text-xs font-bold text-green-600 dark:text-green-400">{formatCurrency(eq.price)}</p></div>
-                                        </div>
-                                        <div className={`flex items-center gap-3 ${eqViewMode === 'list' ? 'mt-4 lg:mt-0' : 'mt-auto pt-4 border-t dark:border-slate-800 justify-between'}`}>
-                                            <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex items-center"><button onClick={() => handleUpdateEqStatus(eq, 'guardado')} className={`px-4 py-2 rounded-lg text-[10px] font-bold transition-all ${eq.status === 'guardado' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>Guardado</button><button onClick={() => handleUpdateEqStatus(eq, 'em_uso')} className={`px-4 py-2 rounded-lg text-[10px] font-bold transition-all ${eq.status === 'em_uso' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>Em Uso</button></div>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => handleEditEquipment(eq)} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-xl transition-colors" title="Editar Equipamento"><Edit size={18}/></button>
-                                                <button onClick={() => setDecommissionEqModal(eq)} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-xl transition-colors" title="Dar Baixa"><Trash2 size={18}/></button>
-                                                <button onClick={() => setExpandedLogId(expandedLogId === eq.id ? null : eq.id)} className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-xl transition-colors" title="Ver Histórico"><History size={18}/></button>
-                                            </div>
-                                        </div>
-                                        </div>
-                                        {expandedLogId === eq.id && (
-                                        <div className="mt-4 pt-4 border-t dark:border-slate-800 animate-in slide-in-from-top-2"><h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Histórico de Movimentações</h4><div className="space-y-3 max-h-40 overflow-y-auto custom-scrollbar pr-2">{[...(eq.history || [])].reverse().map((log, i) => (<div key={i} className="flex items-start gap-3"><div className="mt-1"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div></div><div><p className="text-xs font-bold dark:text-slate-300">{log.action}</p><p className="text-[9px] font-bold text-slate-400 mt-0.5">{formatTimestamp(log.date)} • por {log.user}</p></div></div>))}</div></div>
-                                        )}
-                                    </div>
+                                        <EquipmentCard
+                                            key={eq.id}
+                                            eq={eq}
+                                            eqViewMode={eqViewMode}
+                                            isExpandedLog={expandedLogId === eq.id}
+                                            onToggleLog={() => setExpandedLogId(expandedLogId === eq.id ? null : eq.id)}
+                                            onUpdateStatus={(status) => handleUpdateEqStatus(eq, status)}
+                                            onEdit={() => handleEditEquipment(eq)}
+                                            onDecommission={() => setDecommissionEqModal(eq)}
+                                        />
                                     ))
                                 )}
                                 </div>
-                                {eqDisplayLimit < filteredEquipments.length && (
-                                    <div className="pt-6 pb-2 flex justify-center animate-in fade-in">
-                                        <button onClick={() => setEqDisplayLimit(prev => prev + 20)} className="px-6 py-3 rounded-2xl text-xs font-bold bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
-                                            <PlusCircle size={16} /> Carregar Mais Equipamentos ({filteredEquipments.length - eqDisplayLimit} restantes)
-                                        </button>
-                                    </div>
-                                )}
+                                <LoadMoreButton
+                                    currentLimit={eqDisplayLimit}
+                                    totalCount={filteredEquipments.length}
+                                    onLoadMore={() => setEqDisplayLimit(prev => prev + 20)}
+                                    label="Equipamentos"
+                                />
                             </div>
                             )}
 
@@ -4485,13 +4595,12 @@
                                     })
                                     )}
                                     </div>
-                                    {accDisplayLimit < filteredAccessories.length && (
-                                        <div className="pt-6 pb-2 flex justify-center animate-in fade-in">
-                                            <button onClick={() => setAccDisplayLimit(prev => prev + 20)} className="px-6 py-3 rounded-2xl text-xs font-bold bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
-                                                <PlusCircle size={16} /> Carregar Mais Acessórios ({filteredAccessories.length - accDisplayLimit} restantes)
-                                            </button>
-                                        </div>
-                                    )}
+                                    <LoadMoreButton
+                                        currentLimit={accDisplayLimit}
+                                        totalCount={filteredAccessories.length}
+                                        onLoadMore={() => setAccDisplayLimit(prev => prev + 20)}
+                                        label="Acessórios"
+                                    />
                                     </>
                                 )}
 
@@ -4831,13 +4940,12 @@
                                         })
                                     )}
                                 </div>
-                                {camDisplayLimit < filteredCameras.length && (
-                                    <div className="pt-6 pb-2 flex justify-center animate-in fade-in">
-                                        <button onClick={() => setCamDisplayLimit(prev => prev + 20)} className="px-6 py-3 rounded-2xl text-xs font-bold bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
-                                            <PlusCircle size={16} /> Carregar Mais Câmeras ({filteredCameras.length - camDisplayLimit} restantes)
-                                        </button>
-                                    </div>
-                                )}
+                                <LoadMoreButton
+                                    currentLimit={camDisplayLimit}
+                                    totalCount={filteredCameras.length}
+                                    onLoadMore={() => setCamDisplayLimit(prev => prev + 20)}
+                                    label="Câmeras"
+                                />
                             </div>
                             )}
                         </div>
@@ -5074,36 +5182,19 @@
                                             
                                             <div className={`transition-all ${ticketViewMode === 'list' && !isExpanded ? 'p-4' : 'p-6'} ${isLockedForTech || isFinalized ? 'opacity-75' : ''}`}>
                                                 {ticketViewMode === 'list' && !isExpanded ? (
-                                                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                                                        <div className="flex items-center gap-4 min-w-0 flex-1">
-                                                            <div className={`shrink-0 p-3 rounded-2xl ${ticket.type === 'request' ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}`}>
-                                                                <TicketTypeIcon size={20} />
-                                                            </div>
-                                                            <div className="min-w-0 pr-4">
-                                                                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                                                                    <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border dark:border-slate-700">#{ticket.id.substring(0,6)}</span>
-                                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex items-center gap-1 ${status.color}`}><StatusIcon size={10} /> {status.label}</span>
-                                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex items-center gap-1 ${priority.color}`}><PriorityIcon size={10} /> {priority.label}</span>
-                                                                </div>
-                                                                <h4 className="text-sm font-black dark:text-white truncate" title={ticket.description}>{ticketTitle}: <span className="font-medium text-slate-500 dark:text-slate-400">{ticket.description}</span></h4>
-                                                            </div>
-                                                        </div>
-                                                        <div className="hidden xl:grid grid-cols-4 gap-4 px-4 flex-1">
-                                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><User size={10}/> Solicitante</p><p className="text-xs font-bold dark:text-slate-300 truncate">{formatName(ticket.requester)}</p></div>
-                                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><Building2 size={10}/> Localização</p><p className="text-xs font-bold dark:text-slate-300 truncate">{formatDisplay(ticket.unit)}</p></div>
-                                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><UserPlus size={10}/> Atendimento</p><p className="text-xs font-bold text-blue-600 truncate">{ticket.technician || 'Aguardando'}</p></div>
-                                                            <div><p className="text-[9px] font-black uppercase text-slate-400 mb-0.5 flex items-center gap-1"><Calendar size={10}/> Abertura</p><p className="text-xs font-bold dark:text-slate-300">{formatTimestamp(ticket.createdAt).split(' ')[0].replace(',', '')}</p></div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 mt-2 lg:mt-0 shrink-0">
-                                                            <button onClick={() => { setExpandedChatId(ticket.id); setActiveChatTab('public'); markAsRead(ticket.id, 'public'); }} className="relative px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700">
-                                                                <MessageSquare size={14}/> Detalhes
-                                                                {hasPublicUnread && !hasInternalUnread && (<div className="absolute -top-1 -right-1 p-1 rounded-full border-2 border-white dark:border-slate-900 bg-blue-600 shadow-md animate-bounce"><Bell size={8} className="text-white fill-current" /></div>)}
-                                                                {!hasPublicUnread && hasInternalUnread && (<div className="absolute -top-1 -right-1 p-1 rounded-full border-2 border-white dark:border-slate-900 bg-orange-500 shadow-md animate-bounce"><Bell size={8} className="text-white fill-current" /></div>)}
-                                                                {hasPublicUnread && hasInternalUnread && (<div className="absolute -top-1 -right-1 flex -space-x-1 animate-bounce"><div className="p-1 rounded-full border-2 border-white dark:border-slate-900 bg-blue-600 shadow-md z-10"><Bell size={6} className="text-white fill-current" /></div><div className="p-1 rounded-full border-2 border-white dark:border-slate-900 bg-orange-500 shadow-md z-0"><Bell size={6} className="text-white fill-current" /></div></div>)}
-                                                            </button>
-                                                            {isAdmin && !isFinalized && (<>{isPending && (<button onClick={() => updateTicketData(ticket.id, { technician: techName, status: 'atendimento' }, `${techName} assumiu o chamado`)} className="p-2 rounded-xl text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40 dark:text-green-400 transition-all" title="Assumir Chamado"><UserPlus size={16}/></button>)}{isLockedForTech && (<button onClick={() => updateTicketData(ticket.id, { technician: techName, status: 'atendimento' }, `${techName} assumiu o chamado que estava com ${ticket.technician}`)} className="p-2 rounded-xl text-purple-700 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 dark:text-purple-400 transition-all" title="Assumir Chamado"><UserPlus size={16}/></button>)}</>)}
-                                                        </div>
-                                                    </div>
+                                                    <TicketListRow
+                                                        ticket={ticket}
+                                                        status={status}
+                                                        priority={priority}
+                                                        isAdmin={isAdmin}
+                                                        isLockedForTech={isLockedForTech}
+                                                        isFinalized={isFinalized}
+                                                        isPending={isPending}
+                                                        hasPublicUnread={hasPublicUnread}
+                                                        hasInternalUnread={hasInternalUnread}
+                                                        onOpenDetails={() => { setExpandedChatId(ticket.id); setActiveChatTab('public'); markAsRead(ticket.id, 'public'); }}
+                                                        onTakeTicket={() => updateTicketData(ticket.id, { technician: techName, status: 'atendimento' }, isPending ? `${techName} assumiu o chamado` : `${techName} assumiu o chamado que estava com ${ticket.technician}`)}
+                                                    />
                                                 ) : (
                                                     <>
                                                 <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -5236,12 +5327,13 @@
                                         );
                                     })}
                                     
-                                    {view === 'archive' && archiveDisplayLimit < filteredTickets.length && (
-                                        <div className="pt-6 pb-2 flex justify-center animate-in fade-in">
-                                            <button onClick={() => setArchiveDisplayLimit(prev => prev + 20)} className="px-6 py-3 rounded-2xl text-xs font-bold bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
-                                                <PlusCircle size={16} /> Carregar Mais Chamados ({filteredTickets.length - archiveDisplayLimit} restantes)
-                                            </button>
-                                        </div>
+                                    {view === 'archive' && (
+                                        <LoadMoreButton
+                                            currentLimit={archiveDisplayLimit}
+                                            totalCount={filteredTickets.length}
+                                            onLoadMore={() => setArchiveDisplayLimit(prev => prev + 20)}
+                                            label="Chamados"
+                                        />
                                     )}
                                 </div>
                                 )}
