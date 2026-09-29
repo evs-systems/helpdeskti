@@ -1272,6 +1272,22 @@
             );
         });
 
+        const ViewLoadingSpinner = React.memo(({ message = "Carregando..." }) => {
+            return (
+                <div className="min-h-[calc(100vh-14rem)] w-full flex flex-col items-center justify-center gap-4 animate-in fade-in duration-300">
+                    <div className="relative flex items-center justify-center">
+                        <div className="w-12 h-12 border-4 border-slate-200 dark:border-slate-800 rounded-full"></div>
+                        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin absolute inset-0"></div>
+                    </div>
+                    {message && (
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 animate-pulse">
+                            {message}
+                        </p>
+                    )}
+                </div>
+            );
+        });
+
         const EquipmentCard = React.memo(({
             eq,
             eqViewMode,
@@ -1421,6 +1437,7 @@
             };
 
         const InventoryView = React.memo(({
+            isLoading = false,
             equipments,
             accessories,
             cameras,
@@ -1674,6 +1691,10 @@
                 });
                 return Object.values(groups).sort((a, b) => a.accName.localeCompare(b.accName));
             }, [filteredMovements]);
+
+            if (isLoading) {
+                return <ViewLoadingSpinner message="Carregando inventário..." />;
+            }
 
             return (
 <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
@@ -2476,6 +2497,14 @@
             const pieChartRef = useRef(null);
             const lineChartInstanceRef = useRef(null);
             const pieChartInstanceRef = useRef(null);
+
+            // Lazy load status states para Inventário, Kanban e Checklists (apenas no primeiro carregamento)
+            const [isInventoryLoading, setIsInventoryLoading] = useState(false);
+            const [isKanbanLoading, setIsKanbanLoading] = useState(false);
+            const [isChecklistsLoading, setIsChecklistsLoading] = useState(false);
+            const inventoryLoadedRef = useRef(false);
+            const kanbanLoadedRef = useRef(false);
+            const checklistsLoadedRef = useRef(false);
 
             // Inventário
             const [equipments, setEquipments] = useState([]);
@@ -3585,7 +3614,13 @@
             }, [user, expandedChatId, activeChatTab, isAdmin]);
 
             useEffect(() => {
-                if (!isAdmin || !user) { setEquipments([]); setAccessories([]); setCameras([]); setKanbanCards([]); setKbCards([]); setChecklists([]); }
+                if (!isAdmin || !user) {
+                    setEquipments([]); setAccessories([]); setCameras([]); setKanbanCards([]); setKbCards([]); setChecklists([]);
+                    setIsInventoryLoading(false); setIsKanbanLoading(false); setIsChecklistsLoading(false);
+                    inventoryLoadedRef.current = false;
+                    kanbanLoadedRef.current = false;
+                    checklistsLoadedRef.current = false;
+                }
             }, [isAdmin, user]);
 
             useEffect(() => {
@@ -3593,19 +3628,35 @@
                 let isMounted = true;
                 const safeSetState = (setter, value) => { if (isMounted) setter(value); };
 
+                if (!inventoryLoadedRef.current) {
+                    safeSetState(setIsInventoryLoading, true);
+                }
+
+                let loadedCount = 0;
+                const markLoaded = () => {
+                    loadedCount++;
+                    if (loadedCount >= 3) {
+                        inventoryLoadedRef.current = true;
+                        safeSetState(setIsInventoryLoading, false);
+                    }
+                };
+
                 const unsubEq = onSnapshot(collection(db, 'equipamentos'), (snapshot) => {
                     safeSetState(setEquipments, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
-                }, (error) => { if (error.code === 'permission-denied') safeSetState(setEquipments, []); });
+                    markLoaded();
+                }, (error) => { if (error.code === 'permission-denied') safeSetState(setEquipments, []); markLoaded(); });
 
                 const unsubAcc = onSnapshot(collection(db, 'acessorios'), (snapshot) => {
                     safeSetState(setAccessories, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
-                }, (error) => { if (error.code === 'permission-denied') safeSetState(setAccessories, []); });
+                    markLoaded();
+                }, (error) => { if (error.code === 'permission-denied') safeSetState(setAccessories, []); markLoaded(); });
 
                 const unsubCameras = onSnapshot(collection(db, 'cameras'), (snapshot) => {
                     safeSetState(setCameras, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
-                }, (error) => { if (error.code === 'permission-denied') safeSetState(setCameras, []); });
+                    markLoaded();
+                }, (error) => { if (error.code === 'permission-denied') safeSetState(setCameras, []); markLoaded(); });
 
-                return () => { isMounted = false; unsubEq(); unsubAcc(); unsubCameras(); };
+                return () => { isMounted = false; unsubEq(); unsubAcc(); unsubCameras(); safeSetState(setIsInventoryLoading, false); };
             }, [isAdmin, user, view]);
 
             useEffect(() => {
@@ -3613,20 +3664,36 @@
                 let isMounted = true;
                 const safeSetState = (setter, value) => { if (isMounted) setter(value); };
 
+                if (!kanbanLoadedRef.current) {
+                    safeSetState(setIsKanbanLoading, true);
+                }
+
+                let loadedCount = 0;
+                const markLoaded = () => {
+                    loadedCount++;
+                    if (loadedCount >= 2) {
+                        kanbanLoadedRef.current = true;
+                        safeSetState(setIsKanbanLoading, false);
+                    }
+                };
+
                 const unsubKanban = onSnapshot(collection(db, 'kanban_cards'), (snapshot) => {
                     safeSetState(setKanbanCards, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
+                    markLoaded();
                 }, (error) => {
                     if (error.code === 'permission-denied') {
                         safeSetState(setKanbanCards, []);
                         setFirebaseError({ title: "Acesso às ferramentas de TI bloqueado", message: "Esta sessão não tem permissão de técnico. Entre com a conta da equipe de TI." });
                     }
+                    markLoaded();
                 });
 
                 const unsubKb = onSnapshot(collection(db, 'kb_cards'), (snapshot) => {
                     safeSetState(setKbCards, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
-                }, (error) => { if (error.code === 'permission-denied') safeSetState(setKbCards, []); });
+                    markLoaded();
+                }, (error) => { if (error.code === 'permission-denied') safeSetState(setKbCards, []); markLoaded(); });
 
-                return () => { isMounted = false; unsubKanban(); unsubKb(); };
+                return () => { isMounted = false; unsubKanban(); unsubKb(); safeSetState(setIsKanbanLoading, false); };
             }, [isAdmin, user, view]);
 
             useEffect(() => {
@@ -3634,11 +3701,17 @@
                 let isMounted = true;
                 const safeSetState = (setter, value) => { if (isMounted) setter(value); };
 
+                if (!checklistsLoadedRef.current) {
+                    safeSetState(setIsChecklistsLoading, true);
+                }
+
                 const unsubChecklists = onSnapshot(collection(db, 'checklists'), (snapshot) => {
                     safeSetState(setChecklists, snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
-                }, (error) => { if (error.code === 'permission-denied') safeSetState(setChecklists, []); });
+                    checklistsLoadedRef.current = true;
+                    safeSetState(setIsChecklistsLoading, false);
+                }, (error) => { if (error.code === 'permission-denied') safeSetState(setChecklists, []); checklistsLoadedRef.current = true; safeSetState(setIsChecklistsLoading, false); });
 
-                return () => { isMounted = false; unsubChecklists(); };
+                return () => { isMounted = false; unsubChecklists(); safeSetState(setIsChecklistsLoading, false); };
             }, [isAdmin, user, view]);
 
             const playSound = (type) => {
@@ -5026,6 +5099,9 @@
 
                     <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 md:px-8 py-8">
                         {view === 'checklists' && isAdmin && (
+                          isChecklistsLoading ? (
+                            <ViewLoadingSpinner message="Carregando checklists..." />
+                          ) : (
                           <div className="space-y-6 animate-in fade-in duration-500">
                              <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border dark:border-slate-800">
                                 <div><h2 className="text-2xl font-black flex items-center gap-2 dark:text-white"><ListTodo className="text-blue-600" /> Checklists</h2><p className="text-slate-500 text-sm mt-1 font-medium">Controle de tarefas rotineiras e periódicas do setor de TI.</p></div>
@@ -5087,9 +5163,13 @@
                                 )}
                              </div>
                           </div>
+                          )
                         )}
 
                         {view === 'kanban' && isAdmin && (
+                          isKanbanLoading ? (
+                            <ViewLoadingSpinner message="Carregando atividades e projetos..." />
+                          ) : (
                           <div className={`animate-in fade-in duration-500 ${kanbanTab === 'board' ? 'h-[calc(100vh-140px)] flex flex-col' : 'space-y-6'}`}>
                              <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border dark:border-slate-800">
                                 <div><h2 className="text-2xl font-black flex items-center gap-2 dark:text-white"><Kanban className="text-blue-600" /> Organização TI</h2><p className="text-slate-500 text-sm mt-1 font-medium">Gestão ágil de projetos e base de conhecimento.</p></div>
@@ -5177,10 +5257,12 @@
                                  </div>
                              )}
                           </div>
+                          )
                         )}
 
                                                 {view === 'inventory' && isAdmin && (
                             <InventoryView
+                                isLoading={isInventoryLoading}
                                 equipments={equipments}
                                 accessories={accessories}
                                 cameras={cameras}
